@@ -253,6 +253,8 @@ def main(argv):
     font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
+        # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
+        text = text.replace('\u301c', '~').replace('\uff5e', '~')
         base = os.path.basename(base)
         if base.endswith('.png'): base = base[:-4]
         files = find_states(base)
