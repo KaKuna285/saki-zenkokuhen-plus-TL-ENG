@@ -16,11 +16,15 @@ Several buttons in one go:
 Options (put them before the names):
     --size N         starting font size (default 26, or fitted to the plate with --charname;
                      shrinks automatically if the text is too wide)
-    --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname)
+    --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
+                     DejaVu Sans Condensed with --help_btn)
     --preview        also writes work/preview_<name>.png showing original vs English
     --charname       character-name plate style (white->green text, black outline,
                      thick orange bevelled border), e.g.
                      python3 tools/label.py --charname s3_chr01_tak_name "Yuuki Kataoka"
+    --help_btn       help-bar button style (white text, dark border, cream rim, brown shadow,
+                     left-aligned; greyed-out originals stay grey), e.g.
+                     python3 tools/label.py --help_btn s3_com_help_btn_txt_01 "Confirm"
 
 Styles (picked automatically from the file name):
     _on       black text, white outline, orange glow        (cursor on the button)
@@ -127,6 +131,45 @@ def render_charname(size_wh, text, font_path, size=None):
     out.alpha_composite(Image.composite(grad, Image.new('RGBA', (W, H)), F))
     return out
 
+# help-bar buttons (s3_com_help_btn_txt_*): white text, black edge, dark band, cream rim,
+# soft brown drop shadow; left-aligned. Greyed-out originals get the grey palette.
+HELPBTN = {'fill': (255, 255, 255), 'edge': (0, 0, 0), 'band': (59, 56, 51), 'rim': (245, 236, 208)}
+HELPBTN_GREY = {'fill': (215, 215, 215), 'edge': (0, 0, 0), 'band': (81, 81, 81), 'rim': (182, 182, 182)}
+HELPBTN_SHADOW = ((107, 81, 46), 191, (2, 3))
+CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed.ttf',
+                   '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf',
+                   '/usr/share/fonts/dejavu/DejaVuSansCondensed.ttf']
+
+def is_grey_original(orig):
+    px = orig.get_flattened_data() if hasattr(orig, 'get_flattened_data') else orig.getdata()
+    return sum(1 for p in px if p[3] > 250 and p[0] > 250 and p[1] > 250 and p[2] > 250) < 20
+
+def render_helpbtn(size_wh, text, font_path, size=None, grey=False):
+    W, H = size_wh
+    pal = HELPBTN_GREY if grey else HELPBTN
+    left, right = 5, 5
+    f = ImageFont.truetype(font_path, size or 20)
+    while True:
+        l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f)
+        if (r - l <= W - left - right and b - t <= H - 16) or f.size <= 8: break
+        f = ImageFont.truetype(font_path, f.size - 1)
+    x, y = left - l, (H - (b - t)) // 2 - t
+    F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, y), text, font=f, fill=255)
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    rim_soft = _dilate(F, 4).filter(ImageFilter.GaussianBlur(0.5))
+    rim = _dilate(F, 3)
+    col, alpha, (dx, dy) = HELPBTN_SHADOW
+    out = layer(ImageChops.offset(rim_soft, dx, dy).filter(ImageFilter.GaussianBlur(1)), col, alpha)
+    out.alpha_composite(layer(rim_soft, pal['rim'], 200))
+    out.alpha_composite(layer(rim, pal['rim']))
+    out.alpha_composite(layer(_dilate(F, 2), pal['band']))
+    out.alpha_composite(layer(_dilate(F, 1), pal['edge']))
+    out.alpha_composite(layer(F, pal['fill']))
+    return out
+
 def find_states(base):
     hits = [p for p in glob.glob(os.path.join(ROOT, 'work', 'ja', '**', '*.png'), recursive=True)
             if os.path.basename(p)[:-4] == base or
@@ -134,7 +177,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, args = None, None, False, False, []
+    size, font, preview, charname, helpbtn, args = None, None, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -142,10 +185,11 @@ def main(argv):
         elif a == '--font': font = argv[i + 1]; i += 2
         elif a == '--preview': preview = True; i += 1
         elif a == '--charname': charname = True; i += 1
+        elif a in ('--help_btn', '--help-btn'): helpbtn = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         base = os.path.basename(base)
@@ -159,6 +203,8 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif helpbtn:
+                img = render_helpbtn(orig.size, text, font, size, grey=is_grey_original(orig))
             else:
                 st = list(style_for(name))
                 if name.endswith('_on'):
