@@ -26,6 +26,9 @@ Options (put them before the names):
                      left-aligned; greyed-out originals stay grey), e.g.
                      python3 tools/label.py --help_btn s3_com_help_btn_txt_01 "Confirm"
                      Two centred lines: put \n in the text, e.g. "Bonus\nChallenge"
+    --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
+                     left-aligned). Anything from the first ~ is drawn smaller, e.g.
+                     python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
 
 Styles (picked automatically from the file name):
     _on       black text, white outline, orange glow        (cursor on the button)
@@ -176,6 +179,57 @@ def render_helpbtn(size_wh, text, font_path, size=None, grey=False):
     out.alpha_composite(layer(F, pal['fill']))
     return out
 
+# mode titles (s3_com_mode_title_txt*): white->gold text, dark-brown edge, brown/tan bands,
+# cream rim, brown drop shadow; left-aligned. "Main ~sub~" draws the ~sub~ part smaller.
+TITLE_RINGS = [(4, (251, 235, 174)), (3, (168, 148, 107)), (2, (83, 60, 38)), (1, (37, 16, 1))]
+TITLE_FILL = [(0.0, (255, 255, 255)), (0.45, (253, 244, 205)), (1.0, (250, 222, 125))]
+TITLE_SHADOW = ((105, 80, 46), 190, (2, 4))
+BOLD_FONTS = FONTS
+
+def _grad_img(W, H, y0, y1, stops):
+    g = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(g)
+    for yy in range(H):
+        k = min(1, max(0, (yy - y0) / max(1, y1 - y0)))
+        for (k0, c0), (k1, c1) in zip(stops, stops[1:]):
+            if k0 <= k <= k1:
+                u = (k - k0) / (k1 - k0); c = tuple(int(c0[i] + (c1[i] - c0[i]) * u) for i in range(3)); break
+        d.line([(0, yy), (W, yy)], fill=c + (255,))
+    return g
+
+def render_title(size_wh, text, font_path, size=None):
+    W, H = size_wh
+    left, right = 20, 8
+    i = text.find('~')
+    main, sub = (text[:i].rstrip(), text[i:].strip()) if i > 0 else (text.strip(), '')
+    fs = size or 24
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    while True:
+        fm = ImageFont.truetype(font_path, fs); fsub = ImageFont.truetype(font_path, max(8, round(fs * 0.72)))
+        wm = probe.textlength(main, font=fm); gap = fs * 0.6 if sub else 0
+        ws = probe.textlength(sub, font=fsub) if sub else 0
+        asc = fm.getbbox('Ag', anchor='ls'); hh = asc[3] - asc[1]
+        if (wm + gap + ws <= W - left - right and hh <= H - 12) or fs <= 8: break
+        fs -= 1
+    # vertical: centre the main line's cap-height-to-descender box a bit above the middle (room for shadow)
+    top, bot = fm.getbbox('A', anchor='ls')[1], fm.getbbox('g', anchor='ls')[3]
+    base = round((H - 4) / 2 - (top + bot) / 2)
+    F = Image.new('L', (W, H)); d = ImageDraw.Draw(F)
+    d.text((left, base), main, font=fm, fill=255, anchor='ls')
+    if sub: d.text((left + wm + gap, base), sub, font=fsub, fill=255, anchor='ls')
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    outer = _dilate(F, TITLE_RINGS[0][0]).filter(ImageFilter.GaussianBlur(0.5))
+    col, alpha, (dx, dy) = TITLE_SHADOW
+    sh = Image.new('L', (W, H)); sh.paste(outer, (dx, dy))
+    out = layer(sh.filter(ImageFilter.GaussianBlur(1)), col, alpha)
+    out.alpha_composite(layer(outer, TITLE_RINGS[0][1]))
+    for dist, c in TITLE_RINGS[1:]:
+        out.alpha_composite(layer(_dilate(F, dist), c))
+    out.alpha_composite(Image.composite(_grad_img(W, H, base + top, base, TITLE_FILL), clear, F))
+    return out
+
 def find_states(base):
     hits = [p for p in glob.glob(os.path.join(ROOT, 'work', 'ja', '**', '*.png'), recursive=True)
             if os.path.basename(p)[:-4] == base or
@@ -183,7 +237,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, args = None, None, False, False, False, []
+    size, font, preview, charname, helpbtn, title, args = None, None, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -192,6 +246,7 @@ def main(argv):
         elif a == '--preview': preview = True; i += 1
         elif a == '--charname': charname = True; i += 1
         elif a in ('--help_btn', '--help-btn'): helpbtn = True; i += 1
+        elif a == '--title': title = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
@@ -209,6 +264,8 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif title:
+                img = render_title(orig.size, text, font, size)
             elif helpbtn:
                 img = render_helpbtn(orig.size, text, font, size, grey=is_grey_original(orig))
             else:
