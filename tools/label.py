@@ -25,6 +25,7 @@ Options (put them before the names):
     --help_btn       help-bar button style (white text, dark border, cream rim, brown shadow,
                      left-aligned; greyed-out originals stay grey), e.g.
                      python3 tools/label.py --help_btn s3_com_help_btn_txt_01 "Confirm"
+                     Two centred lines: put \n in the text, e.g. "Bonus\nChallenge"
 
 Styles (picked automatically from the file name):
     _on       black text, white outline, orange glow        (cursor on the button)
@@ -134,7 +135,7 @@ def render_charname(size_wh, text, font_path, size=None):
 # help-bar buttons (s3_com_help_btn_txt_*): white text, black edge, dark band, cream rim,
 # soft brown drop shadow; left-aligned. Greyed-out originals get the grey palette.
 HELPBTN = {'fill': (255, 255, 255), 'edge': (0, 0, 0), 'band': (59, 56, 51), 'rim': (245, 236, 208)}
-HELPBTN_GREY = {'fill': (215, 215, 215), 'edge': (0, 0, 0), 'band': (81, 81, 81), 'rim': (182, 182, 182)}
+HELPBTN_GREY = {'fill': (0, 0, 0), 'edge': (81, 81, 81), 'band': (112, 112, 112), 'rim': (215, 215, 215)}
 HELPBTN_SHADOW = ((107, 81, 46), 191, (2, 3))
 CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed.ttf',
                    '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf',
@@ -148,13 +149,17 @@ def render_helpbtn(size_wh, text, font_path, size=None, grey=False):
     W, H = size_wh
     pal = HELPBTN_GREY if grey else HELPBTN
     left, right = 5, 5
-    f = ImageFont.truetype(font_path, size or 20)
+    text = text.replace('\\n', '\n')           # "Bonus\nChallenge" -> two centred lines
+    multi = '\n' in text
+    f = ImageFont.truetype(font_path, size or (14 if multi else 20))
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
     while True:
-        l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f)
-        if (r - l <= W - left - right and b - t <= H - 16) or f.size <= 8: break
+        l, t, r, b = probe.multiline_textbbox((0, 0), text, font=f, align='center', spacing=0)
+        if (r - l <= W - left - right and b - t <= H - (8 if multi else 16)) or f.size <= 8: break
         f = ImageFont.truetype(font_path, f.size - 1)
-    x, y = left - l, (H - (b - t)) // 2 - t
-    F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, y), text, font=f, fill=255)
+    x = (W - (r - l)) // 2 - l if multi else left - l
+    y = (H - (b - t)) // 2 - t
+    F = Image.new('L', (W, H)); ImageDraw.Draw(F).multiline_text((x, y), text, font=f, fill=255, align='center', spacing=0)
     clear = Image.new('RGBA', (W, H))
     def layer(mask, col, alpha=255):
         if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
@@ -162,7 +167,8 @@ def render_helpbtn(size_wh, text, font_path, size=None, grey=False):
     rim_soft = _dilate(F, 4).filter(ImageFilter.GaussianBlur(0.5))
     rim = _dilate(F, 3)
     col, alpha, (dx, dy) = HELPBTN_SHADOW
-    out = layer(ImageChops.offset(rim_soft, dx, dy).filter(ImageFilter.GaussianBlur(1)), col, alpha)
+    sh = Image.new('L', (W, H)); sh.paste(rim_soft, (dx, dy))          # shift without wrap-around
+    out = layer(sh.filter(ImageFilter.GaussianBlur(1)), col, alpha)
     out.alpha_composite(layer(rim_soft, pal['rim'], 200))
     out.alpha_composite(layer(rim, pal['rim']))
     out.alpha_composite(layer(_dilate(F, 2), pal['band']))
