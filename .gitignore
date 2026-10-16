@@ -1,0 +1,7 @@
+# local working data (game-derived; never commit)
+work/
+build/
+releases/
+ui_inventory.csv
+__pycache__/
+*.pyc
