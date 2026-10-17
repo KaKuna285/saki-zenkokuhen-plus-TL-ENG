@@ -30,8 +30,8 @@ Options (put them before the names):
     --yaku           result-screen yaku line (light-blue text, blue rim, navy shadow): the
                      name on the left, a gap for the han number the game draws, then "Han", e.g.
                      python3 tools/label.py --yaku s3_rst_yaku02 "Riichi"
-    --yakuman        yakuman banner on the result screen (big metallic gold letters, dark edge,
-                     white rim, heavy shadow, centred). Long names: squeezed, or use \\n for two lines, e.g.
+    --yakuman        yakuman banner on the result screen (big shiny gold letters with bevel
+                     lighting, dark edge, white rim, heavy shadow, centred). Long names: squeezed, or use \\n for two lines, e.g.
                      python3 tools/label.py --yakuman s3_rst_yaku32 "Tenhou"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
@@ -286,29 +286,26 @@ def render_yaku(size_wh, text, font_path, size=None, han='Han'):
     out.alpha_composite(Image.composite(_grad_img(W, H, base - cap, base, YAKU_FILL), clear, F))
     return out
 
-# yakuman (s3_rst_yaku32-44, 288x80): big metallic gold letters (yellow -> orange -> white
-# reflection -> cream), dark-brown edge, thin white rim, heavy dark drop shadow; centred.
-YAKUMAN_FILL = [  # sampled row by row from the original yakuman kanji (chrome-style gradient)
-    (0.00, (254, 242, 152)), (0.06, (254, 236, 214)), (0.14, (253, 238, 225)),
-    (0.22, (252, 211, 160)), (0.34, (251, 192, 100)), (0.42, (247, 174, 45)),
-    (0.49, (234, 160, 42)), (0.535, (250, 214, 150)), (0.575, (255, 250, 238)),
-    (0.63, (253, 246, 236)), (0.72, (253, 234, 210)), (0.82, (252, 205, 135)),
-    (0.91, (249, 184, 74)), (0.96, (247, 172, 48)), (1.00, (246, 200, 130))]
+# yakuman (s3_rst_yaku32-44, 288x80): shiny gold letters (multi-band metallic gradient with a
+# soft reflection band + bevel lighting from the top-left), dark-brown edge, white rim and a
+# heavy dark drop shadow; centred.
+YAKUMAN_FILL = [(0.00, (255, 226, 120)), (0.18, (255, 250, 214)), (0.34, (247, 205, 92)),
+                (0.44, (215, 155, 40)), (0.52, (185, 124, 22)), (0.62, (238, 200, 105)),
+                (0.70, (252, 230, 145)), (0.80, (232, 178, 60)), (0.90, (205, 145, 34)),
+                (1.00, (150, 96, 14))]
 YAKUMAN_EDGE = (40, 22, 6)
 YAKUMAN_RIM = (255, 255, 255)
 YAKUMAN_SHADOW = ((22, 10, 0), 255, (6, 9))
 
 def render_yakuman(size_wh, text, font_path, size=None):
     W, H = size_wh
-    text = text.replace('\\n', '\n')
-    lines = text.split('\n')
+    lines = text.replace('\\n', '\n').split('\n')
     pad = 12
     fs = size or (64 if len(lines) == 1 else 32)
     while True:
         f = ImageFont.truetype(font_path, fs)
         masks = [_text_mask(l, f, W - 2 * pad, 0.72) for l in lines]
         cap = -f.getbbox('H', anchor='ls')[1]
-        asc, desc = f.getmetrics()
         lh = cap + (6 if len(lines) > 1 else 0)
         total = lh * len(lines) - (6 if len(lines) > 1 else 0)
         if all(masks) and total <= H - 18 or fs <= 10: break
@@ -320,37 +317,34 @@ def render_yakuman(size_wh, text, font_path, size=None):
     for k, (m, a) in enumerate(masks):
         base = top + cap + k * lh
         F.paste(m, ((W - m.width) // 2, base - a)); bases.append(base)
+    squeezed = any(m.width >= W - 2 * pad for m, _ in masks)
+    small = fs < 52 or squeezed
+    F = ImageChops.lighter(F, _dilate(F, 1).point(lambda v: v * 200 // 255))   # a bit more gold
     clear = Image.new('RGBA', (W, H))
     def layer(mask, col, alpha=255):
         if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
         return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
-    squeezed = any(m.width >= W - 2 * pad for m, _ in masks)
-    small = fs < 52 or squeezed                           # long names get smaller/narrower letters:
-    if small:                                             # fatten the gold strokes so the dark edge
-        F = ImageChops.lighter(F, _dilate(F, 1).point(lambda v: v * 235 // 255))   # doesn't eat them
-    edge = _dilate(F, 2 if small else 3)                  # thinner borders so they don't go dark
+    edge = _dilate(F, 2 if small else 3)
     rim = _dilate(F, 4 if small else 5).filter(ImageFilter.GaussianBlur(0.5))
     col, alpha, (dx, dy) = YAKUMAN_SHADOW
-    if small: dx, dy, alpha = 4, 6, 200                   # lighter, closer shadow for small letters
+    if small: dx, dy, alpha = 4, 6, 200
     sh = Image.new('L', (W, H)); sh.paste(rim, (dx, dy))
     out = layer(sh, col, alpha)
     out.alpha_composite(layer(rim, YAKUMAN_RIM))
     out.alpha_composite(layer(edge, YAKUMAN_EDGE))
     grad = Image.new('RGBA', (W, H))
     for base in bases:                                     # one gradient per line
-        xh = -f.getbbox('x', anchor='ls')[1]               # lowercase letters get the full gradient;
-        g = _grad_img(W, H, base - xh, base, YAKUMAN_FILL)  # capitals' tops stay gold
-        band = Image.new('L', (W, H)); ImageDraw.Draw(band).rectangle([0, base - cap - 8, W, base + 12], fill=255)
+        g = _grad_img(W, H, base - cap, base + 2, YAKUMAN_FILL)
+        band = Image.new('L', (W, H)); ImageDraw.Draw(band).rectangle([0, base - cap - 10, W, base + 14], fill=255)
         grad = Image.composite(g, grad, band)
     out.alpha_composite(Image.composite(grad, clear, F))
-    # bevel like the original: a darker amber band just inside each stroke's edge,
-    # and a soft light line one pixel further in, so the letters look rounded/metallic
-    inner1 = F.filter(ImageFilter.MinFilter(3)); inner2 = inner1.filter(ImageFilter.MinFilter(3))
-    edge_band = ImageChops.subtract(F, inner1)
-    hi_band = ImageChops.subtract(inner1, inner2).filter(ImageFilter.GaussianBlur(0.6))
-    if not small:                                         # too fine to read on small letters
-        out.alpha_composite(layer(edge_band, (176, 98, 14), 150))
-        out.alpha_composite(layer(ImageChops.multiply(hi_band, F), (255, 250, 225), 110))
+    # bevel lighting: treat the letters as rounded shapes lit from the top-left
+    hmap = F.filter(ImageFilter.GaussianBlur(2.2))
+    a1 = ImageChops.offset(hmap, 1, 1); a2 = ImageChops.offset(hmap, -1, -1)
+    hi = ImageChops.multiply(ImageChops.subtract(a1, a2, scale=0.3), F)
+    lo = ImageChops.multiply(ImageChops.subtract(a2, a1, scale=0.3), F)
+    out.alpha_composite(layer(hi, (255, 255, 235)))
+    out.alpha_composite(layer(lo, (110, 62, 6), 200))
     return out
 
 BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
