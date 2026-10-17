@@ -82,7 +82,7 @@ def render(size_wh, text, style, font_path, size=26, stroke_w=2):
     f = ImageFont.truetype(font_path, size)
     while True:   # shrink until it fits
         l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f, stroke_width=stroke_w)
-        if (r - l <= W - 2 * (gr + 4) and b - t <= H - 4) or f.size <= 10: break
+        if (r - l <= W - 14 and b - t <= H - 4) or f.size <= 10: break   # same margin for every state
         f = ImageFont.truetype(font_path, f.size - 1)
     x, y = (W - (r - l)) // 2 - l, (H - (b - t)) // 2 - t
     # glow
