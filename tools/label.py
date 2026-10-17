@@ -17,7 +17,7 @@ Options (put them before the names):
     --size N         starting font size (default 26, or fitted to the plate with --charname;
                      shrinks automatically if the text is too wide)
     --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
-                     DejaVu Sans Condensed with --help_btn)
+                     DejaVu Sans Condensed with --help_btn / --yaku)
     --preview        also writes work/preview_<name>.png showing original vs English
     --charname       character-name plate style (white->green text, black outline,
                      thick orange bevelled border), e.g.
@@ -25,7 +25,10 @@ Options (put them before the names):
     --help_btn       help-bar button style (white text, dark border, cream rim, brown shadow,
                      left-aligned; greyed-out originals stay grey), e.g.
                      python3 tools/label.py --help_btn s3_com_help_btn_txt_01 "Confirm"
-                     Two centred lines: put \n in the text, e.g. "Bonus\nChallenge"
+                     Two centred lines: put \\n in the text, e.g. "Bonus\\nChallenge"
+    --yaku           result-screen yaku line (light-blue text, blue rim, navy shadow): the
+                     name on the left, a gap for the han number the game draws, then "Han", e.g.
+                     python3 tools/label.py --yaku s3_rst_yaku02 "Riichi"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -230,6 +233,46 @@ def render_title(size_wh, text, font_path, size=None):
     out.alpha_composite(Image.composite(_grad_img(W, H, base + top, base, TITLE_FILL), clear, F))
     return out
 
+# yaku lines on the result screen (s3_rst_yaku01-28, 280x40): name on the left (x 33-182),
+# a gap where the game draws the han number itself (x ~190-222), then "Han" (x ~224-256).
+YAKU_FILL = [(0.0, (225, 238, 250)), (1.0, (192, 244, 253))]
+YAKU_RIM = (22, 55, 152)
+YAKU_SHADOW = ((0, 16, 64), 205, (2, 3))
+YAKU_NAME_BOX = (33, 182)
+YAKU_HAN_BOX = (223, 257)
+
+def render_yaku(size_wh, text, font_path, size=None, han='Han'):
+    W, H = size_wh
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    def fit(t, box_w, start):
+        f = ImageFont.truetype(font_path, start)
+        while probe.textlength(t, font=f) > box_w and f.size > 8:
+            f = ImageFont.truetype(font_path, f.size - 1)
+        return f
+    fn = fit(text, YAKU_NAME_BOX[1] - YAKU_NAME_BOX[0], size or 22)
+    fh = fit(han, YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0], 20) if han else None
+    top, bot = fn.getbbox('H', anchor='ls')[1], 0
+    base = round(21.5 - top / 2)                         # capital letters centred where the kanji sit
+    F = Image.new('L', (W, H)); d = ImageDraw.Draw(F)
+    d.text((YAKU_NAME_BOX[0], base), text, font=fn, fill=255, anchor='ls')
+    if han:
+        hw = probe.textlength(han, font=fh)
+        d.text((YAKU_HAN_BOX[0] + (YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0] - hw) / 2, base), han, font=fh, fill=255, anchor='ls')
+    # make the white letters a little thicker: add a soft half-pixel around each stroke
+    F = ImageChops.lighter(F, _dilate(F, 1).point(lambda v: v * 225 // 255))
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    rim = _dilate(F, 3); rim_soft = _dilate(F, 4).filter(ImageFilter.GaussianBlur(0.6))
+    col, alpha, (dx, dy) = YAKU_SHADOW
+    sh = Image.new('L', (W, H)); sh.paste(rim_soft, (dx, dy))
+    out = layer(sh, col, alpha)
+    out.alpha_composite(layer(rim_soft, YAKU_RIM, 170))
+    out.alpha_composite(layer(rim, YAKU_RIM))
+    out.alpha_composite(Image.composite(_grad_img(W, H, base + top, base, YAKU_FILL), clear, F))
+    return out
+
 def find_states(base):
     hits = [p for p in glob.glob(os.path.join(ROOT, 'work', 'ja', '**', '*.png'), recursive=True)
             if os.path.basename(p)[:-4] == base or
@@ -237,7 +280,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, title, args = None, None, False, False, False, False, []
+    size, font, preview, charname, helpbtn, title, yaku, args = None, None, False, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -247,10 +290,11 @@ def main(argv):
         elif a == '--charname': charname = True; i += 1
         elif a in ('--help_btn', '--help-btn'): helpbtn = True; i += 1
         elif a == '--title': title = True; i += 1
+        elif a == '--yaku': yaku = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (CONDENSED_FONTS if (helpbtn or yaku) else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
@@ -266,6 +310,8 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif yaku:
+                img = render_yaku(orig.size, text, font, size)
             elif title:
                 img = render_title(orig.size, text, font, size)
             elif helpbtn:
