@@ -17,7 +17,8 @@ Options (put them before the names):
     --size N         starting font size (default 26, or fitted to the plate with --charname;
                      shrinks automatically if the text is too wide)
     --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
-                     DejaVu Sans Condensed with --help_btn / --yaku)
+                     DejaVu Sans Condensed with --help_btn;
+                     DejaVu Sans Condensed Bold with --yaku)
     --preview        also writes work/preview_<name>.png showing original vs English
     --charname       character-name plate style (white->green text, black outline,
                      thick orange bevelled border), e.g.
@@ -29,6 +30,9 @@ Options (put them before the names):
     --yaku           result-screen yaku line (light-blue text, blue rim, navy shadow): the
                      name on the left, a gap for the han number the game draws, then "Han", e.g.
                      python3 tools/label.py --yaku s3_rst_yaku02 "Riichi"
+    --yakuman        yakuman banner on the result screen (big metallic gold letters, dark edge,
+                     white rim, heavy shadow, centred). Long names: squeezed, or use \\n for two lines, e.g.
+                     python3 tools/label.py --yakuman s3_rst_yaku32 "Tenhou"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -241,25 +245,34 @@ YAKU_SHADOW = ((0, 16, 64), 205, (2, 3))
 YAKU_NAME_BOX = (33, 182)
 YAKU_HAN_BOX = (223, 257)
 
+def _text_mask(text, font, max_w, min_squeeze=0.72):
+    """Text as an L mask (cropped to its advance box, baseline at row `asc`). If it is wider
+    than max_w it is squeezed horizontally (keeps the letters tall) down to min_squeeze;
+    returns (mask, ascent) or None if it still does not fit."""
+    asc, desc = font.getmetrics()
+    w = int(ImageDraw.Draw(Image.new('L', (1, 1))).textlength(text, font=font)) + 2
+    m = Image.new('L', (w, asc + desc)); ImageDraw.Draw(m).text((0, asc), text, font=font, fill=255, anchor='ls')
+    if w <= max_w: return m, asc
+    if max_w / w < min_squeeze: return None
+    return m.resize((max_w, m.height), Image.LANCZOS), asc
+
 def render_yaku(size_wh, text, font_path, size=None, han='Han'):
     W, H = size_wh
-    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
-    def fit(t, box_w, start):
-        f = ImageFont.truetype(font_path, start)
-        while probe.textlength(t, font=f) > box_w and f.size > 8:
-            f = ImageFont.truetype(font_path, f.size - 1)
-        return f
-    fn = fit(text, YAKU_NAME_BOX[1] - YAKU_NAME_BOX[0], size or 22)
-    fh = fit(han, YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0], 20) if han else None
-    top, bot = fn.getbbox('H', anchor='ls')[1], 0
-    base = round(21.5 - top / 2)                         # capital letters centred where the kanji sit
-    F = Image.new('L', (W, H)); d = ImageDraw.Draw(F)
-    d.text((YAKU_NAME_BOX[0], base), text, font=fn, fill=255, anchor='ls')
+    def fit(t, box_w, start, squeeze):
+        fs = start
+        while True:
+            f = ImageFont.truetype(font_path, fs)
+            r = _text_mask(t, f, box_w, squeeze)
+            if r or fs <= 8: return (r or _text_mask(t, f, box_w, 0.01)), f
+            fs -= 1
+    (mn, asc), fn = fit(text, YAKU_NAME_BOX[1] - YAKU_NAME_BOX[0], size or 27, 0.72)
+    cap = -fn.getbbox('H', anchor='ls')[1]
+    base = round(19.5 + cap / 2)                          # capitals centred where the kanji sit (rows 9-29)
+    F = Image.new('L', (W, H))
+    F.paste(mn, (YAKU_NAME_BOX[0], base - asc))
     if han:
-        hw = probe.textlength(han, font=fh)
-        d.text((YAKU_HAN_BOX[0] + (YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0] - hw) / 2, base), han, font=fh, fill=255, anchor='ls')
-    # make the white letters a little thicker: add a soft half-pixel around each stroke
-    F = ImageChops.lighter(F, _dilate(F, 1).point(lambda v: v * 225 // 255))
+        (mh, asch), fh = fit(han, YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0], 22, 0.8)
+        F.paste(mh, (YAKU_HAN_BOX[0] + (YAKU_HAN_BOX[1] - YAKU_HAN_BOX[0] - mh.width) // 2, base - asch))
     clear = Image.new('RGBA', (W, H))
     def layer(mask, col, alpha=255):
         if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
@@ -270,8 +283,79 @@ def render_yaku(size_wh, text, font_path, size=None, han='Han'):
     out = layer(sh, col, alpha)
     out.alpha_composite(layer(rim_soft, YAKU_RIM, 170))
     out.alpha_composite(layer(rim, YAKU_RIM))
-    out.alpha_composite(Image.composite(_grad_img(W, H, base + top, base, YAKU_FILL), clear, F))
+    out.alpha_composite(Image.composite(_grad_img(W, H, base - cap, base, YAKU_FILL), clear, F))
     return out
+
+# yakuman (s3_rst_yaku32-44, 288x80): big metallic gold letters (yellow -> orange -> white
+# reflection -> cream), dark-brown edge, thin white rim, heavy dark drop shadow; centred.
+YAKUMAN_FILL = [  # sampled row by row from the original yakuman kanji (chrome-style gradient)
+    (0.00, (254, 242, 152)), (0.06, (254, 236, 214)), (0.14, (253, 238, 225)),
+    (0.22, (252, 211, 160)), (0.34, (251, 192, 100)), (0.42, (247, 174, 45)),
+    (0.49, (234, 160, 42)), (0.535, (250, 214, 150)), (0.575, (255, 250, 238)),
+    (0.63, (253, 246, 236)), (0.72, (253, 234, 210)), (0.82, (252, 205, 135)),
+    (0.91, (249, 184, 74)), (0.96, (247, 172, 48)), (1.00, (246, 200, 130))]
+YAKUMAN_EDGE = (40, 22, 6)
+YAKUMAN_RIM = (255, 255, 255)
+YAKUMAN_SHADOW = ((22, 10, 0), 255, (6, 9))
+
+def render_yakuman(size_wh, text, font_path, size=None):
+    W, H = size_wh
+    text = text.replace('\\n', '\n')
+    lines = text.split('\n')
+    pad = 12
+    fs = size or (64 if len(lines) == 1 else 32)
+    while True:
+        f = ImageFont.truetype(font_path, fs)
+        masks = [_text_mask(l, f, W - 2 * pad, 0.72) for l in lines]
+        cap = -f.getbbox('H', anchor='ls')[1]
+        asc, desc = f.getmetrics()
+        lh = cap + (6 if len(lines) > 1 else 0)
+        total = lh * len(lines) - (6 if len(lines) > 1 else 0)
+        if all(masks) and total <= H - 18 or fs <= 10: break
+        fs -= 1
+    masks = [m or _text_mask(l, f, W - 2 * pad, 0.01) for m, l in zip(masks, lines)]
+    F = Image.new('L', (W, H))
+    top = (H - 9 - total) // 2                            # leave room for the drop shadow below
+    bases = []
+    for k, (m, a) in enumerate(masks):
+        base = top + cap + k * lh
+        F.paste(m, ((W - m.width) // 2, base - a)); bases.append(base)
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    squeezed = any(m.width >= W - 2 * pad for m, _ in masks)
+    small = fs < 52 or squeezed                           # long names get smaller/narrower letters:
+    if small:                                             # fatten the gold strokes so the dark edge
+        F = ImageChops.lighter(F, _dilate(F, 1).point(lambda v: v * 235 // 255))   # doesn't eat them
+    edge = _dilate(F, 2 if small else 3)                  # thinner borders so they don't go dark
+    rim = _dilate(F, 4 if small else 5).filter(ImageFilter.GaussianBlur(0.5))
+    col, alpha, (dx, dy) = YAKUMAN_SHADOW
+    if small: dx, dy, alpha = 4, 6, 200                   # lighter, closer shadow for small letters
+    sh = Image.new('L', (W, H)); sh.paste(rim, (dx, dy))
+    out = layer(sh, col, alpha)
+    out.alpha_composite(layer(rim, YAKUMAN_RIM))
+    out.alpha_composite(layer(edge, YAKUMAN_EDGE))
+    grad = Image.new('RGBA', (W, H))
+    for base in bases:                                     # one gradient per line
+        xh = -f.getbbox('x', anchor='ls')[1]               # lowercase letters get the full gradient;
+        g = _grad_img(W, H, base - xh, base, YAKUMAN_FILL)  # capitals' tops stay gold
+        band = Image.new('L', (W, H)); ImageDraw.Draw(band).rectangle([0, base - cap - 8, W, base + 12], fill=255)
+        grad = Image.composite(g, grad, band)
+    out.alpha_composite(Image.composite(grad, clear, F))
+    # bevel like the original: a darker amber band just inside each stroke's edge,
+    # and a soft light line one pixel further in, so the letters look rounded/metallic
+    inner1 = F.filter(ImageFilter.MinFilter(3)); inner2 = inner1.filter(ImageFilter.MinFilter(3))
+    edge_band = ImageChops.subtract(F, inner1)
+    hi_band = ImageChops.subtract(inner1, inner2).filter(ImageFilter.GaussianBlur(0.6))
+    if not small:                                         # too fine to read on small letters
+        out.alpha_composite(layer(edge_band, (176, 98, 14), 150))
+        out.alpha_composite(layer(ImageChops.multiply(hi_band, F), (255, 250, 225), 110))
+    return out
+
+BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
+                        '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
+                        '/usr/share/fonts/dejavu/DejaVuSansCondensed-Bold.ttf']
 
 def find_states(base):
     hits = [p for p in glob.glob(os.path.join(ROOT, 'work', 'ja', '**', '*.png'), recursive=True)
@@ -280,7 +364,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, title, yaku, args = None, None, False, False, False, False, False, []
+    size, font, preview, charname, helpbtn, title, yaku, yakuman, args = None, None, False, False, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -291,10 +375,11 @@ def main(argv):
         elif a in ('--help_btn', '--help-btn'): helpbtn = True; i += 1
         elif a == '--title': title = True; i += 1
         elif a == '--yaku': yaku = True; i += 1
+        elif a == '--yakuman': yakuman = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (CONDENSED_FONTS if (helpbtn or yaku) else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if yaku else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
@@ -310,6 +395,8 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif yakuman:
+                img = render_yakuman(orig.size, text, font, size)
             elif yaku:
                 img = render_yaku(orig.size, text, font, size)
             elif title:
