@@ -18,7 +18,7 @@ Options (put them before the names):
                      shrinks automatically if the text is too wide)
     --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
                      DejaVu Sans Condensed with --help_btn;
-                     DejaVu Sans Condensed Bold with --yaku)
+                     DejaVu Sans Condensed Bold with --yaku / --rule)
     --preview        also writes work/preview_<name>.png showing original vs English
     --charname       character-name plate style (white->green text, black outline,
                      thick orange bevelled border), e.g.
@@ -33,6 +33,9 @@ Options (put them before the names):
     --yakuman        yakuman banner on the result screen (big shiny gold letters with bevel
                      lighting, dark edge, white rim, heavy shadow, centred). Long names: squeezed, or use \\n for two lines, e.g.
                      python3 tools/label.py --yakuman s3_rst_yaku32 "Tenhou"
+    --rule           rules-screen style: picks the right look per state for s3_rule_txt* (on = orange-red,
+                     off = grey, hold = white) and s3_rule_item_txt_* (on = orange glow, hold = yellow), e.g.
+                     python3 tools/label.py --rule s3_rule_txt01 "1 Game"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -347,6 +350,24 @@ def render_yakuman(size_wh, text, font_path, size=None):
     out.alpha_composite(layer(lo, (110, 62, 6), 200))
     return out
 
+# rules screen (mahjong_table/s3_rule_txt*_{on,off,hold} 72x32 and s3_rule_item_txt_*_{...} 144x32).
+# (fill top, fill bottom, outline, glow, glow radius); the glow colour is taken from the original.
+RULE_STYLES = {
+    ('txt', 'on'):    ((255, 112, 10), (225, 88, 0), (0, 0, 0), (75, 77, 74), 2),        # orange-red
+    ('txt', 'off'):   ((128, 126, 124), (128, 126, 124), (39, 39, 39), (60, 60, 60), 2),  # grey
+    ('txt', 'hold'):  ((255, 255, 255), (236, 236, 235), (75, 77, 74), (75, 77, 74), 2),  # white
+    ('item', 'on'):   ((255, 255, 255), (255, 238, 222), (0, 0, 0), (255, 120, 0), 3),   # white, orange glow
+    ('item', 'off'):  ((255, 255, 255), (236, 237, 236), (76, 77, 74), (76, 77, 74), 2),
+    ('item', 'hold'): ((255, 253, 239), (255, 199, 46), (21, 21, 21), (21, 21, 21), 2),  # yellow
+}
+
+def rule_style(name, orig):
+    fam = 'item' if 'rule_item' in name else 'txt'
+    state = next((k for k in ('on', 'off', 'hold') if name.endswith('_' + k)), 'off')
+    st = list(RULE_STYLES[(fam, state)])
+    st[3] = sample_glow(orig) or st[3]
+    return tuple(st), (18 if fam == 'txt' else 20)
+
 BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/dejavu/DejaVuSansCondensed-Bold.ttf']
@@ -358,7 +379,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, title, yaku, yakuman, args = None, None, False, False, False, False, False, False, []
+    size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, args = None, None, False, False, False, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -370,10 +391,11 @@ def main(argv):
         elif a == '--title': title = True; i += 1
         elif a == '--yaku': yaku = True; i += 1
         elif a == '--yakuman': yakuman = True; i += 1
+        elif a == '--rule': rule = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if yaku else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
@@ -389,6 +411,9 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif rule:
+                st, start = rule_style(name, orig)
+                img = render(orig.size, text, st, font, size or start)
             elif yakuman:
                 img = render_yakuman(orig.size, text, font, size)
             elif yaku:
