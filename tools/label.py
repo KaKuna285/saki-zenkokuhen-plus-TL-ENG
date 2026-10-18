@@ -36,6 +36,10 @@ Options (put them before the names):
     --rule           rules-screen style: picks the right look per state for s3_rule_txt* (on = orange-red,
                      off = grey, hold = white) and s3_rule_item_txt_* (on = orange glow, hold = yellow), e.g.
                      python3 tools/label.py --rule s3_rule_txt01 "1 Game"
+    --chg_info       in-match challenge info (s3_tak_chg_info_*): "~ Clear Condition ~" on top and
+                     your text underneath, both centred, white with grey outline and dark glow, e.g.
+                     python3 tools/label.py --chg_info s3_tak_chg_info_02 "Win a hand"
+                     (own header: "Header\\nCondition")
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -368,6 +372,36 @@ def rule_style(name, orig):
     st[3] = sample_glow(orig) or st[3]
     return tuple(st), (18 if fam == 'txt' else 20)
 
+# in-match challenge info (mahjong_table/s3_tak_chg_info_*, 320x104): two centred lines - the
+# header "~Clear Condition~" and the condition itself; white text, grey outline, soft black glow.
+CHG_HEADER = '~ Clear Condition ~'
+CHG_LINE_CENTRES = (28, 73.5)              # measured on the 104 px tall originals
+
+def render_chg_info(size_wh, text, font_path, size=None):
+    W, H = size_wh
+    text = text.replace('\\n', '\n')
+    header, cond = text.split('\n', 1) if '\n' in text else (CHG_HEADER, text)
+    F = Image.new('L', (W, H))
+    for line, cy in ((header, CHG_LINE_CENTRES[0]), (cond, CHG_LINE_CENTRES[1])):
+        fs = size or 21
+        while True:
+            f = ImageFont.truetype(font_path, fs)
+            r = _text_mask(line, f, W - 24, 0.82)
+            if r or fs <= 8: break
+            fs -= 1
+        m, asc = r or _text_mask(line, f, W - 24, 0.01)
+        cap = -f.getbbox('H', anchor='ls')[1]
+        base = round(cy * H / 104 + cap / 2)
+        F.paste(m, ((W - m.width) // 2, base - asc), m)
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    out = layer(_dilate(F, 4).filter(ImageFilter.GaussianBlur(4)), (0, 0, 0), 230)   # soft dark glow
+    out.alpha_composite(layer(_dilate(F, 2), (76, 76, 76)))                           # grey outline
+    out.alpha_composite(layer(F, (255, 255, 255)))
+    return out
+
 BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/dejavu/DejaVuSansCondensed-Bold.ttf']
@@ -379,7 +413,7 @@ def find_states(base):
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, args = None, None, False, False, False, False, False, False, False, []
+    size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, chg, args = None, None, False, False, False, False, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -392,6 +426,7 @@ def main(argv):
         elif a == '--yaku': yaku = True; i += 1
         elif a == '--yakuman': yakuman = True; i += 1
         elif a == '--rule': rule = True; i += 1
+        elif a in ('--chg_info', '--chg-info'): chg = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
@@ -411,6 +446,8 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif chg:
+                img = render_chg_info(orig.size, text, font, size)
             elif rule:
                 st, start = rule_style(name, orig)
                 img = render(orig.size, text, st, font, size or start)
