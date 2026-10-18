@@ -1,0 +1,3 @@
+# Textures that may have a different size than the original (one name per line).
+# The game may stretch or crop them - check in game!
+s3_ttl_copyright

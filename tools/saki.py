@@ -122,6 +122,10 @@ def build(game):
             if f.endswith('.png'):
                 n = norm(re.sub(r'^\d{4}_', '', f[:-4]))     # old "NNNN_name.png" files still work
                 edits[n] = Image.open(os.path.join(r, f)).convert('RGBA')
+    allow = set()                         # textures allowed to change size (resize_ok.txt, one name per line)
+    ap = os.path.join(ROOT, 'resize_ok.txt')
+    if os.path.exists(ap):
+        allow = {norm(l.strip()) for l in open(ap, encoding='utf-8') if l.strip() and not l.startswith('#')}
     print(f'{len(edits)} edited textures; replacing every copy in every archive ...')
     outdir = os.path.join(ROOT, 'build', 'DATA')
     shutil.rmtree(outdir, ignore_errors=True); os.makedirs(outdir)
@@ -135,7 +139,10 @@ def build(game):
         im = edits[key]
         orig, fmt = tgaconv.load(t)
         if orig.size != im.size:
-            print(f'  WARNING {key}: your PNG is {im.size}, the copy in {pk} is {orig.size} - skipped'); continue
+            if key not in allow:
+                print(f'  WARNING {key}: your PNG is {im.size}, the copy in {pk} is {orig.size} - skipped'
+                      f' (add "{key}" to resize_ok.txt to use it anyway)'); continue
+            print(f'  NOTE {key}: size changed {orig.size} -> {im.size} in {pk} (allowed by resize_ok.txt)')
         seen.add(h); seen_name[h] = key
         new = tgaconv.save(im, fmt)
         if j is None: repl.setdefault(pk, {})[i] = new
