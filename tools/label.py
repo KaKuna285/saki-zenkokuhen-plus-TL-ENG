@@ -5,7 +5,7 @@ EASY MODE - give a button name (without _on/_off/_hold) and the English text:
 
     python3 tools/label.py s3_mmenu_btn_txt_team "Team"
 
-  -> finds every state of that button in work/ja/ (…_on, …_off, …_hold, …_disable),
+  -> finds every state of that button in work/ja/ (…_on, …_off, …_hold, …_disable, …_invalid),
      draws "Team" in the matching style for each state, and saves them into
      work/en/ (same sub-folder and file name as the original).
 
@@ -52,6 +52,7 @@ Styles (picked automatically from the file name):
     _off      white text, grey outline                      (not selected)
     _hold     white->yellow text, dark outline              (being pressed)
     _disable  grey text, dark outline                       (can't be selected)
+    _invalid  grey text, black outline                      (can't be used, e.g. training stats)
 """
 import collections, glob, os, sys
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
@@ -70,6 +71,7 @@ STYLES = {
     'off':     ((255, 255, 255), (255, 255, 255), (75, 77, 74), (40, 40, 40), 2),
     'hold':    ((255, 252, 240), (253, 210, 64), (21, 21, 21), (21, 21, 21), 2),
     'disable': ((150, 150, 150), (150, 150, 150), (50, 50, 50), (30, 30, 30), 2),
+    'invalid': ((144, 144, 144), (131, 131, 131), (0, 0, 0), (0, 0, 0), 2),
 }
 
 def style_for(name):
