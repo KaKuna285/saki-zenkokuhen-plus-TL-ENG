@@ -18,7 +18,7 @@ Options (put them before the names):
                      shrinks automatically if the text is too wide)
     --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
                      DejaVu Sans Condensed with --help_btn;
-                     DejaVu Sans Condensed Bold with --yaku / --rule)
+                     DejaVu Sans Condensed Bold with --yaku / --rule / --cmd)
     --preview        also writes work/preview_<name>.png showing original vs English
     --charname       character-name plate style (white->green text, black outline,
                      thick orange bevelled border), e.g.
@@ -40,6 +40,9 @@ Options (put them before the names):
                      your text underneath, both centred, white with grey outline and dark glow, e.g.
                      python3 tools/label.py --chg_info s3_tak_chg_info_02 "Win a hand"
                      (own header: "Header\\nCondition")
+    --cmd            in-match command labels (s3_tak_cmd_NN): makes both _1 (white, grey outline)
+                     and _2 (cream, brown outline), e.g.
+                     python3 tools/label.py --cmd s3_tak_cmd_01 "Pon"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -80,13 +83,13 @@ def sample_glow(im):
     c = collections.Counter(p[:3] for p in px if 20 < p[3] < 200)
     return c.most_common(1)[0][0] if c else None
 
-def render(size_wh, text, style, font_path, size=26, stroke_w=2):
+def render(size_wh, text, style, font_path, size=26, stroke_w=2, margin=14):
     W, H = size_wh
     top, bottom, stroke, glow, gr = style
     f = ImageFont.truetype(font_path, size)
     while True:   # shrink until it fits
         l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f, stroke_width=stroke_w)
-        if (r - l <= W - 14 and b - t <= H - 4) or f.size <= 10: break   # same margin for every state
+        if (r - l <= W - margin and b - t <= H - 4) or f.size <= 10: break   # same margin for every state
         f = ImageFont.truetype(font_path, f.size - 1)
     x, y = (W - (r - l)) // 2 - l, (H - (b - t)) // 2 - t
     # glow
@@ -402,18 +405,23 @@ def render_chg_info(size_wh, text, font_path, size=None):
     out.alpha_composite(layer(F, (255, 255, 255)))
     return out
 
+# in-match command labels (mahjong_table/s3_tak_cmd_NN_1 / _2, 64x24) drawn on the grey / orange
+# command buttons: _1 = white text with dark-grey outline, _2 = cream text with brown outline.
+CMD_STYLES = {'1': ((255, 255, 255), (234, 234, 234), (39, 39, 39), (39, 39, 39), 1),
+              '2': ((254, 232, 189), (236, 213, 173), (80, 44, 14), (80, 44, 14), 1)}
+
 BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/dejavu/DejaVuSansCondensed-Bold.ttf']
 
-def find_states(base):
+def find_states(base, extra=()):
     hits = [p for p in glob.glob(os.path.join(ROOT, 'work', 'ja', '**', '*.png'), recursive=True)
             if os.path.basename(p)[:-4] == base or
-            (os.path.basename(p).startswith(base + '_') and os.path.basename(p)[len(base) + 1:-4] in STYLES)]
+            (os.path.basename(p).startswith(base + '_') and (os.path.basename(p)[len(base) + 1:-4] in STYLES or os.path.basename(p)[len(base) + 1:-4] in extra))]
     return sorted(hits)
 
 def main(argv):
-    size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, chg, args = None, None, False, False, False, False, False, False, False, False, []
+    size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, chg, cmd, args = None, None, False, False, False, False, False, False, False, False, False, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -427,17 +435,18 @@ def main(argv):
         elif a == '--yakuman': yakuman = True; i += 1
         elif a == '--rule': rule = True; i += 1
         elif a in ('--chg_info', '--chg-info'): chg = True; i += 1
+        elif a == '--cmd': cmd = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
         text = text.replace('\u301c', '~').replace('\uff5e', '~')
         base = os.path.basename(base)
         if base.endswith('.png'): base = base[:-4]
-        files = find_states(base)
+        files = find_states(base, ('1', '2') if cmd else ())
         if not files:
             print(f'!! nothing in work/ja matches "{base}" - check the name'); continue
         pv = []
@@ -446,6 +455,15 @@ def main(argv):
             orig = Image.open(src).convert('RGBA')
             if charname:
                 img = render_charname(orig.size, text, font, size)
+            elif cmd:
+                st = CMD_STYLES.get(name.rsplit('_', 1)[-1], CMD_STYLES['1'])
+                # draw on a wider canvas at full size, then squeeze sideways if it's too wide
+                W0, H0 = orig.size
+                wide = render((W0 * 2, H0), text, st, font, size or 19, margin=6)
+                bb = wide.getbbox() or (0, 0, 1, 1)
+                piece = wide.crop((bb[0], 0, bb[2], H0))
+                if piece.width > W0 - 2: piece = piece.resize((W0 - 2, H0), Image.LANCZOS)
+                img = Image.new('RGBA', orig.size); img.alpha_composite(piece, ((W0 - piece.width) // 2, 0))
             elif chg:
                 img = render_chg_info(orig.size, text, font, size)
             elif rule:
