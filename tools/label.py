@@ -315,10 +315,10 @@ def render_yaku(size_wh, text, font_path, size=None, han='Han'):
 # yakuman (s3_rst_yaku32-44, 288x80): shiny gold letters (multi-band metallic gradient with a
 # soft reflection band + bevel lighting from the top-left), dark-brown edge, white rim and a
 # heavy dark drop shadow; centred.
-YAKUMAN_FILL = [(0.00, (255, 226, 120)), (0.18, (255, 250, 214)), (0.34, (247, 205, 92)),
-                (0.44, (215, 155, 40)), (0.52, (185, 124, 22)), (0.62, (238, 200, 105)),
-                (0.70, (252, 230, 145)), (0.80, (232, 178, 60)), (0.90, (205, 145, 34)),
-                (1.00, (150, 96, 14))]
+YAKUMAN_FILL = [(0.00, (255, 230, 120)), (0.16, (255, 248, 200)), (0.32, (255, 214, 90)),
+                (0.44, (245, 176, 40)), (0.52, (222, 145, 25)), (0.62, (252, 214, 105)),
+                (0.70, (255, 238, 150)), (0.80, (252, 198, 62)), (0.90, (238, 166, 38)),
+                (1.00, (200, 128, 20))]
 YAKUMAN_EDGE = (40, 22, 6)
 YAKUMAN_RIM = (255, 255, 255)
 YAKUMAN_SHADOW = ((22, 10, 0), 255, (6, 9))
@@ -367,10 +367,17 @@ def render_yakuman(size_wh, text, font_path, size=None):
     # bevel lighting: treat the letters as rounded shapes lit from the top-left
     hmap = F.filter(ImageFilter.GaussianBlur(2.2))
     a1 = ImageChops.offset(hmap, 1, 1); a2 = ImageChops.offset(hmap, -1, -1)
-    hi = ImageChops.multiply(ImageChops.subtract(a1, a2, scale=0.3), F)
+    hi = ImageChops.multiply(ImageChops.subtract(a1, a2, scale=0.22), F)   # stronger highlights
     lo = ImageChops.multiply(ImageChops.subtract(a2, a1, scale=0.3), F)
-    out.alpha_composite(layer(hi, (255, 255, 235)))
-    out.alpha_composite(layer(lo, (110, 62, 6), 200))
+    out.alpha_composite(layer(hi, (255, 246, 190)))
+    out.alpha_composite(layer(lo, (120, 70, 8), 140))                        # softer shading
+    # glossy sheen: a soft white glaze over the top part of each line
+    for base in bases:
+        g = Image.new('L', (W, H)); dg = ImageDraw.Draw(g)
+        t0 = base - cap - 2; t1 = base - int(cap * 0.45)
+        for yy in range(max(0, t0), min(H, t1)):
+            dg.line([(0, yy), (W, yy)], fill=int(60 * (1 - (yy - t0) / max(1, t1 - t0))))
+        out.alpha_composite(layer(ImageChops.multiply(g, F), (255, 248, 205)))
     return out
 
 # rules screen (mahjong_table/s3_rule_txt*_{on,off,hold} 72x32 and s3_rule_item_txt_*_{...} 144x32).
