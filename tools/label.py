@@ -135,6 +135,7 @@ CHARNAME_RING_SMALL = [(5, (34, 21, 1), 140), (4, (118, 73, 1), 255), (3, (208, 
                        (2, (90, 56, 1), 255), (1, (0, 0, 0), 255)]
 
 CHARNAME_REFERENCE = 'Hatsumi Usuzumi'      # a long name: every name uses the size that fits this one
+CHARNAME_TALL = 1.2                         # letters this much taller than the font normally is (same width)
 
 def render_charname(size_wh, text, font_path, size=None):
     W, H = size_wh
@@ -149,12 +150,21 @@ def render_charname(size_wh, text, font_path, size=None):
     if not size:
         while fs > 8 and not fits(ImageFont.truetype(font_path, fs), CHARNAME_REFERENCE): fs -= 1
     while fs > 8 and not fits(ImageFont.truetype(font_path, fs), text): fs -= 1
-    f = ImageFont.truetype(font_path, fs)
-    l, t, r, b = probe.textbbox((0, 0), text, font=f)
-    cap = -f.getbbox('H', anchor='ls')[1]
+    # taller letters: draw CHARNAME_TALL times bigger, then narrow them back to the same width.
+    # Done at 4x resolution and scaled DOWN, so the result stays sharp (no blur).
+    fv = ImageFont.truetype(font_path, max(8, round(fs * CHARNAME_TALL)))
+    ref = CHARNAME_REFERENCE if not size else text
+    hx = probe.textlength(ref, font=ImageFont.truetype(font_path, fs)) / max(1, probe.textlength(ref, font=fv))
+    big = ImageFont.truetype(font_path, fv.size * 4)
+    asc, desc = big.getmetrics()
+    wb = int(probe.textlength(text, font=big)) + 16
+    m = Image.new('L', (wb, asc + desc)); ImageDraw.Draw(m).text((8, asc), text, font=big, fill=255, anchor='ls')
+    m = m.resize((max(1, round(wb * hx / 4)), max(1, round((asc + desc) / 4))), Image.LANCZOS)
+    cap = -fv.getbbox('H', anchor='ls')[1]
     base = (H + cap) // 2                                   # capitals centred vertically
-    x = (W - (r - l)) // 2 - l
-    F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, base), text, font=f, fill=255, anchor='ls')
+    bb = m.getbbox() or (0, 0, m.width, m.height)
+    F = Image.new('L', (W, H))
+    F.paste(m, ((W - (bb[2] - bb[0])) // 2 - bb[0], base - round(asc / 4)))
     out = Image.new('RGBA', (W, H))
     for dist, col, alpha in CHARNAME_RING:
         mm = _dilate(F, dist)
