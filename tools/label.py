@@ -9,6 +9,8 @@ EASY MODE - give a button name (without _on/_off/_hold) and the English text:
      draws "Team" in the matching style for each state, and saves them into
      work/en/ (same sub-folder and file name as the original).
 
+Two lines: put \\n in the text, e.g. "Free\\nMatch".
+
 Several buttons in one go:
 
     python3 tools/label.py s3_mmenu_btn_txt_team "Team" s3_mmenu_btn_txt_solo "Solo"
@@ -88,20 +90,29 @@ def sample_glow(im):
 def render(size_wh, text, style, font_path, size=26, stroke_w=2, margin=14):
     W, H = size_wh
     top, bottom, stroke, glow, gr = style
+    lines = text.replace('\\n', '\n').split('\n')   # "Free\nMatch" -> two centred lines
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
     f = ImageFont.truetype(font_path, size)
     while True:   # shrink until it fits
-        l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f, stroke_width=stroke_w)
-        if (r - l <= W - margin and b - t <= H - 4) or f.size <= 10: break   # same margin for every state
+        gap = 6 if len(lines) > 1 else 0
+        lh = -f.getbbox('H', anchor='ls')[1] + gap            # capital height + gap per line
+        boxes = [probe.textbbox((0, 0), ln, font=f, stroke_width=stroke_w, anchor='ls') for ln in lines]
+        wmax = max(bx[2] - bx[0] for bx in boxes)
+        t, b = boxes[0][1], (len(lines) - 1) * lh + boxes[-1][3]
+        if (wmax <= W - margin and b - t <= H - 4) or f.size <= 10: break   # same margin for every state
         f = ImageFont.truetype(font_path, f.size - 1)
-    x, y = (W - (r - l)) // 2 - l, (H - (b - t)) // 2 - t
+    y = (H - (b - t)) // 2 - t
+    pos = [((W - (bx[2] - bx[0])) // 2 - bx[0], y + k * lh) for k, bx in enumerate(boxes)]
+    def mask(stroke):
+        m = Image.new('L', (W, H)); d = ImageDraw.Draw(m)
+        for (px, py), ln in zip(pos, lines): d.text((px, py), ln, font=f, fill=255, stroke_width=stroke, anchor='ls')
+        return m
     # glow
-    m = Image.new('L', (W, H)); ImageDraw.Draw(m).text((x, y), text, font=f, fill=255, stroke_width=stroke_w + 1)
-    out = Image.new('RGBA', (W, H), glow + (0,)); out.putalpha(m.filter(ImageFilter.GaussianBlur(gr)))
+    out = Image.new('RGBA', (W, H), glow + (0,)); out.putalpha(mask(stroke_w + 1).filter(ImageFilter.GaussianBlur(gr)))
     # outline
-    so = Image.new('L', (W, H)); ImageDraw.Draw(so).text((x, y), text, font=f, fill=255, stroke_width=stroke_w)
-    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), stroke + (255,)), Image.new('RGBA', (W, H)), so))
-    # fill, with a vertical gradient between top and bottom colour
-    fm = Image.new('L', (W, H)); ImageDraw.Draw(fm).text((x, y), text, font=f, fill=255)
+    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), stroke + (255,)), Image.new('RGBA', (W, H)), mask(stroke_w)))
+    # fill, with a vertical gradient between top and bottom colour (one gradient over all lines)
+    fm = mask(0)
     grad = Image.new('RGBA', (W, H))
     y0, y1 = y + t, y + b
     for yy in range(H):
