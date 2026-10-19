@@ -1,93 +1,143 @@
-# Saki Zenkoku-hen Plus (PCSG00908) — English UI translation
+# Saki Zenkoku-hen Plus (PS Vita, PCSG00908) — English fan translation
 
-Work-in-progress fan translation tools. Phase 1 covers menus and UI.
+An English patch for **Saki Zenkoku-hen Plus** (update 2.01), plus the tools used to make it, so
+anyone can pick up the work and continue it.
 
-## What the game's files look like
+**Current version: v1.0.** Download it from the
+[Releases page](https://github.com/KaKuna285/saki-zenkokuhen-plus-TL-ENG/releases).
+
+## Translation status
+
+| Part of the game | Status |
+|---|---|
+| Main menu and mode select | ✅ Done |
+| Help bar and help pages, mode titles | ✅ Done |
+| Shop / cards | 🟡 Mostly done, some elements left |
+| Online / ad-hoc lobby | ✅ Done |
+| Rules screen | ✅ Done |
+| Character names (romaji, given name first) | ✅ Done |
+| Result screen: yaku, yakuman | ✅ Done |
+| Training screens (stats, abilities) | ✅ Done |
+| In-match UI (commands, challenge info, cursor and end texts) | 🟡 Mostly done, some elements left |
+| Challenge mode | ❌ Not yet |
+| Story mode (speech bubbles, about 700 images) | ❌ Not yet |
+
+Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than the kanji.
+
+## For players: installing the patch
+
+You need your own dump of the game **with update 2.01**. The patch only works on that exact
+version; the installer checks this and changes nothing if your files don't match.
+
+1. Download the newest `saki-zenkoku-plus-en-vX.Y.zip` from Releases and unzip it.
+2. Run the installer on the game's `DATA` folder:
+   - **Vita3K, Linux:** `./apply.sh ~/.local/share/Vita3K/Vita3K/ux0/app/PCSG00908/DATA`
+   - **Vita3K, Windows:** double-click `apply.bat` and drag the `DATA` folder into the window
+     (usually `%APPDATA%\Vita3K\Vita3K\ux0\app\PCSG00908\DATA`)
+   - **Real PS Vita:** run the installer with an output folder
+     (`./apply.sh <DATA> <output>`), then copy the output to `ux0:rePatch/PCSG00908/DATA/`
+
+Your original files are kept as `*.orig`. To uninstall: `./apply.sh --restore <DATA folder>`.
+A newer release installs straight over an older one. The `README.txt` inside the zip has the
+full instructions.
+
+## For translators: how it works
+
+Almost all Japanese text in this game is **baked into images** (textures), so translating it is
+image editing, not script hacking. The tools here extract every texture as a PNG, let you
+draw English versions in the game's style, and put them back.
+
+### Requirements
+
+Linux (developed on CachyOS/Arch with the fish shell):
+
+```fish
+sudo pacman -S python-pillow xdelta3 ttf-dejavu
+```
+
+### Workflow
+
+```fish
+cd ~/Projects/saki-zenkoku-tl
+set -U GAME ~/.local/share/Vita3K/Vita3K/ux0/app/PCSG00908   # once (bash: GAME=...)
+
+python3 tools/saki.py extract $GAME    # ~1.5 min, ~3 GB: originals as PNGs in work/ja/<category>/
+# make English images in work/en/ (same file name, any subfolder): label.py or GIMP/Krita
+python3 tools/saki.py build $GAME      # puts every edited texture back -> build/DATA/
+python3 tools/saki.py install $GAME    # copies into the game (backs up originals as *.orig once)
+python3 tools/saki.py restore $GAME    # undo: put the originals back
+```
+
+Rules for edited images: same pixel size as the original (exceptions can be listed in
+`resize_ok.txt`) and a transparent background. Paletted originals are re-quantised
+automatically. `build` always starts from the `.orig` backups, so it is safe to run as often as
+you like.
+
+### label.py — English labels in the game's styles
+
+Give the texture name (without `_on`/`_off`/`_hold`) and the English text. The tool finds every
+state of that image in `work/ja/`, draws each one in the matching style and saves it to `work/en/`:
+
+```fish
+python3 tools/label.py s3_mmenu_btn_txt_team "Team"
+python3 tools/label.py --preview s3_mmenu_btn_txt_shop "Shop"   # also writes a before/after image
+```
+
+| Option | Used for |
+|---|---|
+| *(none)* | menu buttons: `_on`, `_off`, `_hold`, `_disable`, `_invalid` states |
+| `--charname` | character name plates (`s3_chrNN_tak_name`) |
+| `--help_btn` | help-bar buttons (`s3_com_help_btn_txt_NN`) |
+| `--title` | mode titles (`s3_com_mode_title_txtNN`), text after `~` drawn smaller |
+| `--yaku` | result-screen yaku lines (`s3_rst_yaku01`–`28`) |
+| `--yakuman` | gold yakuman banners (`s3_rst_yaku32`–`44`) |
+| `--rule` | rules screen (`s3_rule_txt*`, `s3_rule_item_txt_*`) |
+| `--chg_info` | in-match challenge conditions (`s3_tak_chg_info_*`) |
+| `--cmd` | in-match commands (`s3_tak_cmd_NN`, both `_1` and `_2`) |
+
+Other options: `--size N`, `--font file.ttf`. Use `\n` in the text for two lines.
+`python3 tools/label.py` with no arguments prints the full help.
+
+Complex screens (for example the training ability pages, `s3_trng_ability_info_NN`) were made in
+GIMP with DejaVu Sans Bold.
+
+### Making a release
+
+```fish
+python3 tools/saki.py patch $GAME v1.1 "What's new in this version"
+```
+
+This builds, makes xdelta patches from the original 2.01 files to the translation, self-tests
+them and writes `releases/saki-zenkoku-plus-en-v1.1.zip`, with installers for Linux/macOS
+(`apply.sh`) and Windows (`apply.bat`/`apply.ps1` plus `xdelta3.exe`). Every release patches from
+the originals, so players only ever need the newest one.
+
+## What's left, and where to find it
+
+| Category in `work/ja/` | What's in it |
+|---|---|
+| `story_bubbles` | story speech bubbles (`s3_story_*_word_*`): this *is* the story text |
+| `challenge` | challenge mode conditions (`s3_chg_*`); training (`s3_trng_*`, `s3_trmg_*`) is done |
+| `mahjong_table` | in-match UI; a few elements are still Japanese |
+| `shop_cards` | shop and card images; some are still Japanese |
+| `dummy_unused` | probably unused placeholders, can be skipped |
+
+Open questions:
+- Find out which runtime-rendered text (CSV tables, eboot strings) actually shows up in game.
+- `KS/kslist.akb` is compiled script bytecode. Check whether any story text lives outside the
+  bubble images.
+
+## Technical notes on the game's files
 
 | File | What it is |
 |---|---|
-| `DATA/*.QPK` + `*.QPI` | Archives. The QPI holds the index (offset and size per entry). Most entries are `CZL` (zlib) compressed. `tools/qpk.py` unpacks them and rebuilds them **byte-identical** when nothing is changed. |
-| `IDX/DATA0.HKT` | Name table for every archive entry. It stores names only (no offsets or sizes), so it doesn't need rebuilding. |
-| `TGA.QPK` (7,071 textures) | **Almost all visible Japanese text is baked into images here**: menu buttons, help text, mahjong-table UI, challenge info, and the story-mode speech bubbles (`s3_story_*_word_*`, about 700 of them). |
-| `CSV.QPK` | Shift-JIS tables: character names, shop card list, glossary, and so on. Some of them (`reference.csv`, `sysmenu_guide.csv`) look like leftovers from another game on the same engine. |
-| `GOF.QPK` | Bitmap fonts `font_a_20.gof` / `font_dbg_22.gof`. ASCII glyphs are present with per-glyph widths, so English should render for any runtime text. |
-| `eboot.bin` | Decrypted ELF. Has about 450 UTF-8 strings, mostly debug menus plus a few system dialogs. |
-| `HOTDOG.QPK`, `APP*/EGAPP*.QPK` | Animated screens and cut-ins (`HDG` bundles plus `HAM` layouts). The bundles hold their own copies of UI textures, and `build` patches them automatically. |
+| `DATA/*.QPK` + `*.QPI` | Archives. The QPI is the index (offset and size per entry); most entries are `CZL` (zlib) compressed. `tools/qpk.py` unpacks them and rebuilds them byte-identically when nothing changes. |
+| `IDX/DATA0.HKT` | Name table for every archive entry (names only, so it never needs rebuilding). |
+| `TGA.QPK` | About 7,000 textures: almost all visible Japanese text. |
+| `HOTDOG.QPK`, `APP*.QPK`, `EGAPP*.QPK` | Animated screens (`HDG` bundles). Each bundle carries its own copies of the textures it uses; the *Plus* edition's newer versions are in `EGAPP0200.QPK`. `build` patches every copy by name. |
+| `CSV.QPK` | Shift-JIS tables (character names, shop card list, glossary …). |
+| `GOF.QPK` | Bitmap fonts with ASCII glyphs, so English works for any runtime text. |
+| `eboot.bin` | About 450 UTF-8 strings, mostly debug menus. |
 
-So phase 1 is **image editing, not script hacking**. No font or pointer work is needed for the UI.
-
-## Requirements
-
-`python` and `python-pillow` (`sudo pacman -S python-pillow`).
-
-## Workflow
-
-```bash
-cd ~/Projects/saki-zenkoku-tl
-GAME=~/.local/share/Vita3K/Vita3K/ux0/app/PCSG00908
-
-python3 tools/saki.py extract $GAME     # ~1.5 min, ~3 GB in work/
-#  work/ja/<category>/<name>.png      original UI textures (reference, don't edit)
-#  ui_inventory.csv                   tracking sheet (japanese / english / status columns)
-
-# Put the edited images in work/en/ (same file name, any subfolder),
-# either made in GIMP/Krita or with the label helper:
-python3 tools/label.py work/ja/main_menu/s3_mmenu_btn_txt_shop_on.png \
-        work/en/main_menu/s3_mmenu_btn_txt_shop_on.png "Shop"
-
-python3 tools/saki.py build $GAME       # -> build/DATA/TGA.QPK + TGA.QPI
-```
-
-Rules for edited images: keep the **same pixel size** and a transparent background. Paletted
-originals are re-quantised to 256 colours automatically.
-
-## Installing and testing in Vita3K
-
-```fish
-python3 tools/saki.py build $GAME     # finds every copy of each edited texture
-python3 tools/saki.py install $GAME   # backs up originals once (*.orig), copies build/DATA/* in
-python3 tools/saki.py restore $GAME   # undo: put the originals back
-```
-Many screens (main menu, shop, lobby and so on) are animated bundles (`.hdg`) inside `HOTDOG.QPK`, and
-the *Plus* edition ships newer versions of some of them in `EGAPP0200.QPK` (for example its own
-`mainmenu.hdg`, with slightly different button images). Each bundle carries **its own copy** of
-the textures it uses. `extract` exports the newest version of each texture name. `build` replaces **every
-texture with that name** in every archive (and any byte-identical copy under another name).
-Your PNG must have the same pixel size as the copies it replaces; a warning is printed otherwise.
-`build` always reads the `.orig` backups when they exist, so it's safe to run it again and again.
-
-On a real Vita, copy `build/DATA/*` to `ux0:rePatch/PCSG00908/DATA/` instead.
-
-## Making a release (xdelta patch)
-
-```fish
-sudo pacman -S xdelta3                                   # once
-python3 tools/saki.py patch $GAME v0.1 "- Main menu buttons"
-```
-This builds, makes xdelta patches **from the original 2.01 files** (`*.orig`) to the translation,
-self-tests them, and writes `releases/saki-zenkoku-plus-en-v0.1.zip`. The zip contains the patches,
-checksums (`files.txt`, `manifest.json`), installers (`apply.sh` for Linux/macOS, `apply.bat`/`apply.ps1`
-plus `xdelta3.exe` for Windows) and a README for players. Every release starts from the originals,
-so players only ever need the newest one, and installing it over an older one just works.
-
-## Categories (UI textures exported)
-
-| category | count | notes |
-|---|---|---|
-| mahjong_table | 1335 | in-match UI, results, rules |
-| story_bubbles | 703 | story speech bubbles (this is the story text) |
-| shop_cards | 454 | |
-| online_adhoc | 412 | ad-hoc and online lobby |
-| dummy_unused | 304 | probably unused placeholders, skip |
-| main_menu | 215 | **start here** |
-| challenge | 199 | challenge mode conditions |
-| common_help | 170 | help pages, mode titles |
-| character_names | 66 | |
-| story_other / misc | 110 | |
-
-## Open questions / next steps
-- [ ] In-game test of the rebuilt TGA archive (Cards button)
-- [ ] Transcribe the Japanese for `main_menu` + `common_help` into `ui_inventory.csv`
-- [ ] Choose a font and style guide for buttons (on / off / hold states differ)
-- [ ] Find which runtime-rendered text (CSV tables, eboot strings) actually shows up in game
-- [ ] `KS/kslist.akb` is compiled script bytecode. Check whether any story text lives outside the bubble images
+Fan project, not affiliated with the game's publishers. This repo contains only tools and
+instructions, no game files: you need your own copy of the game.
