@@ -21,6 +21,9 @@ anyone can pick up the work and continue it.
 | In-match UI (commands, challenge info, cursor, yakus and end texts) | Mostly done, some elements left |
 | Challenges including network challenges| Not yet |
 | Story mode (speech bubbles, about 700 images) | Not yet |
+| Staff roll (a video, `MOVIE.QPK`) | Not yet |
+| Save-data and online messages | Done |
+
 
 Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than english translations.
 
@@ -39,7 +42,9 @@ version; the installer checks this and changes nothing if your files don't match
    - **Real PS Vita:** run the installer with an output folder
      (`./apply.sh <DATA> <output>`), then copy the output to `ux0:rePatch/PCSG00908/DATA/`
 
-Your original files are kept as `*.orig`. To uninstall: `./apply.sh --restore <DATA folder>`.
+The installer also patches `eboot.bin` (music list names, save and online messages) if your
+copy matches the one the patch was made from; if not, it says "skipped eboot.bin" and that
+text stays Japanese. Your original files are kept as `*.orig`. To uninstall: `./apply.sh --restore <DATA folder>`.
 A newer release installs straight over an older one. The `README.txt` inside the zip has the
 full instructions.
 
@@ -100,6 +105,21 @@ python3 tools/label.py --preview s3_mmenu_btn_txt_shop "Shop"   # also writes a 
 Other options: `--size N`, `--font file.ttf`. Use `\n` in the text for two lines.
 `python3 tools/label.py` with no arguments prints the full help.
 
+### Text inside the game program (eboot.bin)
+
+A little text is not an image but a string inside `eboot.bin`: the music room list, the
+save-data messages and the online lobby messages. Translations live in `text/eboot.tsv`
+(Japanese, tab, English, tab, note; `\n` is a line break). `build` applies them
+automatically and writes `build/eboot.bin`; `install` copies it into the game.
+
+```fish
+python3 tools/eboot.py check $GAME    # does every line fit and get found?
+python3 tools/eboot.py dump $GAME     # list all Japanese strings -> work/eboot_strings.tsv
+```
+
+English must fit in the bytes of the Japanese (a Japanese character is 3 bytes, a letter 1)
+plus any free space after it, and `%s`/`%d` codes must stay the same. `check` tells you.
+
 Complex screens (for example the training ability pages, `s3_trng_ability_info_NN`) were made in
 GIMP with DejaVu Sans Bold.
 
@@ -123,9 +143,11 @@ the originals, so players only ever need the newest one.
 | `mahjong_table` | in-match UI; a few elements are still Japanese |
 | `shop_cards` | shop and card related, cards are still in Japanese |
 | `dummy_unused` | probably unused placeholders, can be skipped |
+| `DATA/MOVIE.QPK` | two MP4 videos (960×544, H.264): the opening and the staff roll; the credits are baked into the video |
 
 Open questions:
-- Find out which runtime-rendered text (CSV tables, eboot strings) actually shows up in game (probably music).
+- Find out which runtime-rendered text in the CSV tables actually shows up in game. (The eboot
+  strings players see are in `text/eboot.tsv`; `tools/eboot.py dump` lists the rest, mostly debug menus.)
 - `KS/kslist.akb` is compiled script bytecode. Check whether any story text lives outside the
   bubble images.
 
@@ -139,7 +161,7 @@ Open questions:
 | `HOTDOG.QPK`, `APP*.QPK`, `EGAPP*.QPK` | Animated screens (`HDG` bundles). Each bundle carries its own copies of the textures it uses; the *Plus* edition's newer versions are in `EGAPP0200.QPK`. `build` patches every copy by name. |
 | `CSV.QPK` | Shift-JIS tables (character names, shop card list, glossary …). |
 | `GOF.QPK` | Bitmap fonts with ASCII glyphs, so English works for any runtime text. |
-| `eboot.bin` | About 450 UTF-8 strings, mostly debug menus. |
+| `eboot.bin` | About 600 UTF-8 strings, mostly debug menus; the player-visible ones are in `text/eboot.tsv`. |
 
 Fan project, not affiliated with the game's publishers. This repo contains only tools and
 instructions, no game files: you need your own copy of the game.

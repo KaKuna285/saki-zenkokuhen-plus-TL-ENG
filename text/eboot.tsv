@@ -1,0 +1,87 @@
+# Text inside eboot.bin. Format: japanese<TAB>english<TAB>note
+# \n = line break. Empty english = keep the Japanese. Check with: python3 tools/eboot.py check $GAME
+
+# Music room (Sound menu) - the names of the music list categories
+メインメニュー	Main Menu
+チャレンジメニュー	Challenge Menu
+フリー対局メニュー	Free Match Menu
+通信対局メニュー	Wireless Match Menu
+カスタマイズ	Customize
+ショップ	Shop
+対局ＢＧＭ	Match BGM
+対局 リーチ後	Match: After Riichi
+団体戦 大将戦	Team Match: Captain
+通信チャレンジ	Online Challenge
+ストーリー 日常	Story: Everyday
+ストーリー コミカル	Story: Comical
+ストーリー 緊張	Story: Tension
+OP曲	Opening Theme
+スタッフロール	Staff Roll
+
+# Save data (system dialogs at startup)
+記録メディアにデータが存在しません。\nシステムデータのロードを中止しますか？	No save data was found on the memory card.\nStop loading the system data?
+ロード出来ませんでした。	Could not load the data.
+咲-Saki-全国編Plusのシステムデータです	System data for Saki Zenkoku-hen Plus	save file description
+システムデータ	System Data	save file title
+本ゲームはオートセーブ機能に対応しています。\nオートセーブ中にはメモリーカードを抜いたり\n本体の電源を切ったりしないでください。	This game uses autosave.\nDo not remove the memory card or turn off\nthe system while autosaving.
+システムデータが存在しません。\nシステムデータを作成してよろしいですか？	System data does not exist.\nCreate system data now?
+システムデータを作成しないと、\nゲーム中のデータが保存されませんが\nよろしいですか？	If you do not create system data,\nyour progress will not be saved.\nIs that OK?
+%02d時間%02d分  ■：%s	%02dh %02dm  ■：%s	play time shown in the save details
+
+# Coins
+コイン%d枚を獲得しました	You got %d coins!
+
+# Online play (lobby, tables, errors)
+ネットワークから切断されました。	Disconnected from the network.
+卓ID入力	Enter Table ID
+%sさん	%s	"%sさん" + "が切断しました" = "<name> has disconnected."
+が切断しました	 has disconnected.
+PlayStation™Networkにサインインされていません。	You are not signed in to PlayStation™Network.
+通信エラーが発生しました。	A communication error occurred.
+参加人数：%s／%s	Players: %s/%s
+参加人数：%d／%d	Players: %d/%d
+対局中	Playing	table status
+待機中	Waiting	table status
+作成された卓が一つも見つかりません	No tables have been created.
+卓から抜けました。	You left the table.
+卓に参加出来ませんでした。	Could not join the table.
+タイムアウトしました。	Timed out.
+卓が破棄されました。	The table was closed.
+           作成された卓が見つかりません	           No tables found.	leading spaces kept for the layout
+準備完了がキャンセルされました	Ready was cancelled.
+対局者が４人を超えています	There are more than 4 players.
+%s勝	%s wins
+０００勝	000 wins
+卓ＩＤ：%s	Table ID: %s
+ゲームが開始されています。	The game has already started.
+P2P接続に失敗しました	P2P connection failed.
+エラーが発生しました。\nSAKI_ERR_CODE : E_I01	An error occurred.\nSAKI_ERR_CODE : E_I01
+エラーが発生しました。\nSAKI_ERR_CODE : E_I02	An error occurred.\nSAKI_ERR_CODE : E_I02
+エラーが発生しました。\nSAKI_ERR_CODE : E_I03	An error occurred.\nSAKI_ERR_CODE : E_I03
+エラーが発生しました。\nSAKI_ERR_CODE : E_I04	An error occurred.\nSAKI_ERR_CODE : E_I04
+エラーが発生しました。\nSAKI_ERR_CODE : E_I05	An error occurred.\nSAKI_ERR_CODE : E_I05
+エラーが発生しました。\nSAKI_ERR_CODE : E_I06	An error occurred.\nSAKI_ERR_CODE : E_I06
+エラーが発生しました。\nSAKI_ERR_CODE : E_I07	An error occurred.\nSAKI_ERR_CODE : E_I07
+切断されました。	Disconnected.
+準備完了していないメンバーが居ます。	Some members are not ready yet.
+サーバーからの応答がありません。	No response from the server.
+サーバー混雑により一時的に使用できなくなっています。	The server is busy and temporarily unavailable.
+メンテナンス中です。	Under maintenance.
+見つかりませんでした。	Not found.
+満員です。	Table is full.
+全国対戦を行うにはPlayStation™Networkへサインインが必要です。\nサインインを行いますか？	You need to sign in to PlayStation™Network\nto play National Matches. Sign in now?
+この会場は現在、%s人参加中です\n参加方法を選んでください	%s players are in this venue right now.\nChoose how to join.
+この会場は現在、混雑しています\n参加できない可能性がありますので\n別の会場をおすすめします	This venue is crowded right now.\nYou may not be able to join,\nso we recommend another venue.
+% 4d人	% 4d	player count ("人" = people)
+卓の参加者がいなくなりました。	All players have left the table.
+
+# Online venue names (named after character abilities)
+靴下脱いだ咲	Barefoot Saki
+満月衣	Moon Koromo
+冷たい透華	Cold Touka
+高運佳織	Lucky Kaori
+全力照	Max Teru
+ラス親尭深	Dealer Takami
+ダブルリーチ淡	Double Riichi Awai
+爆発漫	Boom Suzu
+絶一門霞	Zetsu Kasumi

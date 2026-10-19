@@ -15,6 +15,11 @@ if [ "${1:-}" = "--restore" ]; then
     while read -r name orig new; do
         if [ -f "$DATA/$name.orig" ]; then cp -f "$DATA/$name.orig" "$DATA/$name"; echo "restored $name"; fi
     done < "$HERE/files.txt"
+    if [ -f "$HERE/optional.txt" ]; then
+        while read -r name orig new; do
+            if [ -f "$DATA/../$name.orig" ]; then cp -f "$DATA/../$name.orig" "$DATA/../$name"; echo "restored $name"; fi
+        done < "$HERE/optional.txt"
+    fi
     exit 0
 fi
 
@@ -47,4 +52,23 @@ while read -r name orig new; do
     if [ "$(sha "$dest.tmp")" != "$new" ]; then rm -f "$dest.tmp"; echo "PATCH FAILED for $name"; exit 1; fi
     mv -f "$dest.tmp" "$dest"
 done < "$HERE/files.txt"
+
+# eboot.bin (game folder, next to DATA): music list names, save and online messages.
+# Only patched if your copy is exactly the expected one; otherwise that text stays Japanese.
+if [ -f "$HERE/optional.txt" ]; then
+    while read -r name orig new; do
+        t="$DATA/../$name"
+        if [ -f "$t.orig" ]; then b="$t.orig"; else b="$t"; fi
+        if [ ! -f "$b" ] || [ "$(sha "$b")" != "$orig" ]; then
+            echo "skipped $name (your copy is different) - the music list and system messages stay Japanese"
+            continue
+        fi
+        if [ -z "$OUT" ] && [ "$b" = "$t" ]; then cp -f "$t" "$t.orig"; b="$t.orig"; fi
+        if [ -n "$OUT" ]; then dest="$OUT/../$name"; else dest="$t"; fi
+        echo "patching $name ..."
+        xdelta3 -d -f -s "$b" "$HERE/patches/$name.xdelta" "$dest.tmp"
+        if [ "$(sha "$dest.tmp")" != "$new" ]; then rm -f "$dest.tmp"; echo "PATCH FAILED for $name"; exit 1; fi
+        mv -f "$dest.tmp" "$dest"
+    done < "$HERE/optional.txt"
+fi
 echo "Done! The English patch is installed."

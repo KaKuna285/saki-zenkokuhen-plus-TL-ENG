@@ -14,9 +14,11 @@
       every archive that holds a copy of those textures (TGA.QPK, plus the screen
       bundles in HOTDOG.QPK etc.) into build/DATA/. Untouched entries are copied
       byte-for-byte. Always reads from the original files (.orig backups if present).
+      Also translates the text inside eboot.bin (music list, save and online messages)
+      from text/eboot.tsv -> build/eboot.bin (see tools/eboot.py).
 
   python3 tools/saki.py install <game_dir>
-      Backs up each original archive once (as *.orig) and copies build/DATA/* into the game.
+      Backs up each original file once (as *.orig) and copies build/DATA/* (and build/eboot.bin) into the game.
 
   python3 tools/saki.py restore <game_dir>
       Puts all *.orig backups back (undo everything).
@@ -29,7 +31,7 @@
 """
 import csv, hashlib, json, os, re, shutil, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import hdg, qpk, tgaconv
+import eboot, hdg, qpk, tgaconv
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -168,23 +170,42 @@ def build(game):
     shutil.rmtree(W('_orig'), ignore_errors=True)
     missing = set(edits) - set(seen_name.values())
     if missing: print('  NOTE: no copy found in the game for:', ', '.join(sorted(missing)))
+    build_eboot(game)
     print('done -> build/DATA/  (run "install" to copy into the game)')
 
 seen_name = {}
 
+def build_eboot(game):
+    """text/eboot.tsv -> build/eboot.bin (the game program with its built-in text translated)."""
+    out = os.path.join(ROOT, 'build', 'eboot.bin')
+    if os.path.exists(out): os.remove(out)
+    rows = eboot.load_rows()
+    if not rows: return
+    src = eboot.eboot_src(game)
+    if not os.path.exists(src): print('  NOTE: no eboot.bin in the game folder - built-in text skipped'); return
+    new, problems = eboot.apply(open(src, 'rb').read(), rows)
+    for p in problems: print('  WARNING eboot', p)
+    open(out, 'wb').write(new)
+
+def install_file(src, dst):
+    if not os.path.exists(dst + '.orig'):
+        shutil.copy2(dst, dst + '.orig'); print(f'backed up {os.path.basename(dst)} -> {os.path.basename(dst)}.orig')
+    shutil.copy2(src, dst); print(f'installed {os.path.basename(dst)}')
+
 def install(game):
     data = os.path.join(game, 'DATA'); outdir = os.path.join(ROOT, 'build', 'DATA')
     for f in sorted(os.listdir(outdir)):
-        dst = os.path.join(data, f)
-        if not os.path.exists(dst + '.orig'):
-            shutil.copy2(dst, dst + '.orig'); print(f'backed up {f} -> {f}.orig')
-        shutil.copy2(os.path.join(outdir, f), dst); print(f'installed {f}')
+        install_file(os.path.join(outdir, f), os.path.join(data, f))
+    eb = os.path.join(ROOT, 'build', 'eboot.bin')
+    if os.path.exists(eb): install_file(eb, os.path.join(game, 'eboot.bin'))
 
 def restore(game):
     data = os.path.join(game, 'DATA')
     for f in sorted(os.listdir(data)):
         if f.endswith('.orig'):
             shutil.copy2(os.path.join(data, f), os.path.join(data, f[:-5])); print(f'restored {f[:-5]}')
+    eb = os.path.join(game, 'eboot.bin')
+    if os.path.exists(eb + '.orig'): shutil.copy2(eb + '.orig', eb); print('restored eboot.bin')
 
 def sha1(path):
     h = hashlib.sha1()
@@ -207,24 +228,29 @@ def patch(game, version, notes=''):
     rows, manifest = [], {'game': 'Saki Zenkoku-hen Plus', 'title_id': 'PCSG00908', 'game_version': '2.01',
                           'patch_version': version, 'created': datetime.date.today().isoformat(), 'files': {}}
     print('making xdelta patches ...')
-    for f in sorted(os.listdir(newdir)):
-        orig = os.path.join(data, f + '.orig')
-        if not os.path.exists(orig): orig = os.path.join(data, f)      # game not patched yet
-        new = os.path.join(newdir, f)
+    jobs = [(f, data, os.path.join(newdir, f)) for f in sorted(os.listdir(newdir))]
+    eb = os.path.join(ROOT, 'build', 'eboot.bin')
+    if os.path.exists(eb): jobs.append(('eboot.bin', game, eb))   # optional: only if the player's copy matches
+    optional = []
+    for f, base, new in jobs:
+        orig = os.path.join(base, f + '.orig')
+        if not os.path.exists(orig): orig = os.path.join(base, f)      # game not patched yet
         out = os.path.join(pkg, 'patches', f + '.xdelta')
         size = os.path.getsize(orig)
         window = min(1 << 31, max(1 << 26, 1 << (size - 1).bit_length()))   # whole file fits in the window
         subprocess.run([xd, '-e', '-9', '-S', 'djw', '-B', str(window), '-f', '-s', orig, new, out], check=True)
         o, n = sha1(orig), sha1(new)
-        rows.append(f'{f} {o} {n}')
+        (optional if f == 'eboot.bin' else rows).append(f'{f} {o} {n}')
         manifest['files'][f] = {'original_sha1': o, 'original_size': size, 'patched_sha1': n,
-                                'patched_size': os.path.getsize(new), 'patch': f'patches/{f}.xdelta'}
+                                'patched_size': os.path.getsize(new), 'patch': f'patches/{f}.xdelta',
+                                'location': 'game folder (next to DATA), optional' if f == 'eboot.bin' else 'DATA'}
         print(f'  {f}: {os.path.getsize(out) / 1e6:.2f} MB')
     print('verifying: applying the patches to the originals ...')
     with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, 'releases')) as tmp:
         for f, m in manifest['files'].items():
-            orig = os.path.join(data, f + '.orig')
-            if not os.path.exists(orig): orig = os.path.join(data, f)
+            base = game if f == 'eboot.bin' else data
+            orig = os.path.join(base, f + '.orig')
+            if not os.path.exists(orig): orig = os.path.join(base, f)
             res = os.path.join(tmp, f)
             subprocess.run([xd, '-d', '-f', '-s', orig, os.path.join(pkg, m['patch']), res], check=True)
             if sha1(res) != m['patched_sha1']:
@@ -232,6 +258,7 @@ def patch(game, version, notes=''):
             os.remove(res)
             print(f'  {f}: OK')
     open(os.path.join(pkg, 'files.txt'), 'w', newline='\n').write('\n'.join(rows) + '\n')
+    if optional: open(os.path.join(pkg, 'optional.txt'), 'w', newline='\n').write('\n'.join(optional) + '\n')
     json.dump(manifest, open(os.path.join(pkg, 'manifest.json'), 'w'), indent=2)
     tpl = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'release_template')
     for fn in ('apply.sh', 'apply.ps1', 'apply.bat'):
