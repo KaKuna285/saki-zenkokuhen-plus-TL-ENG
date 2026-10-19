@@ -3,7 +3,7 @@
 An English patch for **Saki Zenkoku-hen Plus** (update 2.01), plus the tools used to make it, so
 anyone can pick up the work and continue it.
 
-**Current version: v1.01.** Download it from the
+**Current version: v1.1.** Download it from the
 [Releases page](https://github.com/KaKuna285/saki-zenkokuhen-plus-TL-ENG/releases).
 
 ## Translation status
