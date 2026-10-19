@@ -12,17 +12,17 @@ anyone can pick up the work and continue it.
 |---|---|
 | Main menu and mode select | ✅ Done |
 | Help bar and help pages, mode titles | ✅ Done |
-| Shop / cards | 🟡 Mostly done, some elements left |
+| Shop / cards | 🟡 UI elements done, cards not yet |
+| Music | 🟡 Partially complete, probably requires some more work to edit | 
 | Online / ad-hoc lobby | ✅ Done |
 | Rules screen | ✅ Done |
 | Character names (romaji, given name first) | ✅ Done |
-| Result screen: yaku, yakuman | ✅ Done |
 | Training screens (stats, abilities) | ✅ Done |
-| In-match UI (commands, challenge info, cursor and end texts) | 🟡 Mostly done, some elements left |
-| Challenge mode | ❌ Not yet |
+| In-match UI (commands, challenge info, cursor, yakus and end texts) | 🟡 Mostly done, some elements left |
+| Challenges including network challenges| ❌ Not yet |
 | Story mode (speech bubbles, about 700 images) | ❌ Not yet |
 
-Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than the kanji.
+Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than english translations.
 
 ## For players: installing the patch
 
@@ -119,11 +119,11 @@ the originals, so players only ever need the newest one.
 | `story_bubbles` | story speech bubbles (`s3_story_*_word_*`): this *is* the story text |
 | `challenge` | challenge mode conditions (`s3_chg_*`); training (`s3_trng_*`, `s3_trmg_*`) is done |
 | `mahjong_table` | in-match UI; a few elements are still Japanese |
-| `shop_cards` | shop and card images; some are still Japanese |
+| `shop_cards` | shop and card related, cards are still in Japanese |
 | `dummy_unused` | probably unused placeholders, can be skipped |
 
 Open questions:
-- Find out which runtime-rendered text (CSV tables, eboot strings) actually shows up in game.
+- Find out which runtime-rendered text (CSV tables, eboot strings) actually shows up in game (probably music).
 - `KS/kslist.akb` is compiled script bytecode. Check whether any story text lives outside the
   bubble images.
 
