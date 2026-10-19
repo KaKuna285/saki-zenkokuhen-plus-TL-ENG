@@ -5,3 +5,4 @@ releases/
 ui_inventory.csv
 __pycache__/
 *.pyc
+/tools/Ability Template/
