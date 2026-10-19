@@ -16,7 +16,7 @@ Several buttons in one go:
 Options (put them before the names):
     --size N         starting font size (default 26, or fitted to the plate with --charname;
                      shrinks automatically if the text is too wide)
-    --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans with --charname;
+    --font PATH      a .ttf/.otf font file (default: DejaVu Sans Bold; DejaVu Sans Condensed Bold with --charname;
                      DejaVu Sans Condensed with --help_btn;
                      DejaVu Sans Condensed Bold with --yaku / --rule / --cmd)
     --preview        also writes work/preview_<name>.png showing original vs English
@@ -128,21 +128,32 @@ CHARNAME_RING = [(6, (34, 21, 1), 150), (5, (118, 73, 1), 255), (4, (208, 130, 1
                  (3, (109, 68, 1), 255), (2, (0, 0, 0), 255)]
 CHARNAME_FILL = [(0.0, (250, 255, 252)), (0.45, (185, 240, 200)), (1.0, (70, 225, 110))]
 
+CHARNAME_RING_SMALL = [(5, (34, 21, 1), 140), (4, (118, 73, 1), 255), (3, (208, 130, 1), 255),
+                       (2, (90, 56, 1), 255), (1, (0, 0, 0), 255)]
+
 def render_charname(size_wh, text, font_path, size=None):
     W, H = size_wh
     pad = CHARNAME_RING[0][0]
-    f = ImageFont.truetype(font_path, size or max(10, H - 10))
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    # one font for every name (crisp, no resampling): start at full size, shrink only if needed
+    fs = size or max(10, H - 10)
     while True:
-        l, t, r, b = ImageDraw.Draw(Image.new('L', (1, 1))).textbbox((0, 0), text, font=f)
-        if (r - l <= W - 2 * pad and b - t <= H - 2 * pad) or f.size <= 8: break
-        f = ImageFont.truetype(font_path, f.size - 1)
+        f = ImageFont.truetype(font_path, fs)
+        l, t, r, b = probe.textbbox((0, 0), text, font=f)
+        if (r - l <= W - 2 * pad and b - t <= H - 2 * pad) or fs <= 8: break
+        fs -= 1
+    fs0 = size or max(10, H - 10)
+    choice = f
+    f = choice
+    l, t, r, b = probe.textbbox((0, 0), text, font=f)
+    small = f.size < fs0 - 2                              # noticeably smaller letters -> slimmer border
     x, y = (W - (r - l)) // 2 - l, (H - (b - t)) // 2 - t
     F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, y), text, font=f, fill=255)
     out = Image.new('RGBA', (W, H))
-    for dist, col, alpha in CHARNAME_RING:
-        m = _dilate(F, dist)
-        if alpha < 255: m = m.point(lambda v, a=alpha: v * a // 255)
-        out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), col + (255,)), Image.new('RGBA', (W, H)), m))
+    for dist, col, alpha in (CHARNAME_RING_SMALL if small else CHARNAME_RING):
+        mm = _dilate(F, dist)
+        if alpha < 255: mm = mm.point(lambda v, a=alpha: v * a // 255)
+        out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), col + (255,)), Image.new('RGBA', (W, H)), mm))
     grad = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(grad)
     y0, y1 = y + t, y + b
     for yy in range(H):
@@ -441,7 +452,7 @@ def main(argv):
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (CHARNAME_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (BOLD_CONDENSED_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
