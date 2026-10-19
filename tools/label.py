@@ -126,46 +126,42 @@ def _dilate(m, r):
 # character-name plate: (distance from the letters in px, colour, alpha), drawn outside-in
 CHARNAME_RING = [(6, (34, 21, 1), 150), (5, (118, 73, 1), 255), (4, (208, 130, 1), 255),
                  (3, (109, 68, 1), 255), (2, (0, 0, 0), 255)]
-CHARNAME_FILL = [  # sampled from the green score digits (s3_tak_scr_green_*): green, white middle, deeper green
-    (0.00, (46, 208, 96)), (0.10, (67, 236, 119)), (0.25, (100, 222, 140)), (0.38, (185, 236, 205)),
-    (0.46, (248, 253, 250)), (0.56, (240, 250, 240)), (0.64, (180, 215, 166)), (0.75, (125, 186, 108)),
-    (0.87, (72, 163, 52)), (1.00, (37, 147, 14))]
+CHARNAME_FILL = [  # matched to the green score digits (s3_tak_scr_green_*): saturated green,
+    (0.00, (40, 214, 94)), (0.12, (62, 240, 118)), (0.30, (78, 232, 118)),   # narrow white
+    (0.42, (165, 240, 186)), (0.48, (242, 253, 246)), (0.54, (168, 226, 150)), # highlight in the
+    (0.66, (92, 190, 68)), (0.82, (56, 168, 34)), (1.00, (37, 147, 14))]      # middle, deep green
 
 CHARNAME_RING_SMALL = [(5, (34, 21, 1), 140), (4, (118, 73, 1), 255), (3, (208, 130, 1), 255),
                        (2, (90, 56, 1), 255), (1, (0, 0, 0), 255)]
+
+CHARNAME_REFERENCE = 'Hatsumi Usuzumi'      # a long name: every name uses the size that fits this one
 
 def render_charname(size_wh, text, font_path, size=None):
     W, H = size_wh
     pad = CHARNAME_RING[0][0]
     probe = ImageDraw.Draw(Image.new('L', (1, 1)))
-    # one font for every name (crisp, no resampling): start at full size, shrink only if needed
+    def fits(f, t):
+        l, t_, r, b = probe.textbbox((0, 0), t, font=f)
+        return r - l <= W - 2 * pad and b - t_ <= H - 2 * pad
+    # one uniform size for all names (same letter height and stroke weight); only a name longer
+    # than the reference gets smaller
     fs = size or max(10, H - 10)
-    while True:
-        f = ImageFont.truetype(font_path, fs)
-        l, t, r, b = probe.textbbox((0, 0), text, font=f)
-        if (r - l <= W - 2 * pad and b - t <= H - 2 * pad) or fs <= 8: break
-        fs -= 1
-    fs0 = size or max(10, H - 10)
-    choice = f
-    f = choice
+    if not size:
+        while fs > 8 and not fits(ImageFont.truetype(font_path, fs), CHARNAME_REFERENCE): fs -= 1
+    while fs > 8 and not fits(ImageFont.truetype(font_path, fs), text): fs -= 1
+    f = ImageFont.truetype(font_path, fs)
     l, t, r, b = probe.textbbox((0, 0), text, font=f)
-    small = f.size < fs0 - 2                              # noticeably smaller letters -> slimmer border
-    x, y = (W - (r - l)) // 2 - l, (H - (b - t)) // 2 - t
-    F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, y), text, font=f, fill=255)
+    cap = -f.getbbox('H', anchor='ls')[1]
+    base = (H + cap) // 2                                   # capitals centred vertically
+    x = (W - (r - l)) // 2 - l
+    F = Image.new('L', (W, H)); ImageDraw.Draw(F).text((x, base), text, font=f, fill=255, anchor='ls')
     out = Image.new('RGBA', (W, H))
-    for dist, col, alpha in (CHARNAME_RING_SMALL if small else CHARNAME_RING):
+    for dist, col, alpha in CHARNAME_RING:
         mm = _dilate(F, dist)
         if alpha < 255: mm = mm.point(lambda v, a=alpha: v * a // 255)
         out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), col + (255,)), Image.new('RGBA', (W, H)), mm))
-    grad = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(grad)
-    y0, y1 = y + t, y + b
-    for yy in range(H):
-        k = min(1, max(0, (yy - y0) / max(1, y1 - y0)))
-        for (k0, c0), (k1, c1) in zip(CHARNAME_FILL, CHARNAME_FILL[1:]):
-            if k0 <= k <= k1:
-                u = (k - k0) / (k1 - k0); c = tuple(int(c0[i] + (c1[i] - c0[i]) * u) for i in range(3)); break
-        d.line([(0, yy), (W, yy)], fill=c + (255,))
-    out.alpha_composite(Image.composite(grad, Image.new('RGBA', (W, H)), F))
+    # gradient from the top of the capitals to the baseline - identical for every name
+    out.alpha_composite(Image.composite(_grad_img(W, H, base - cap, base, CHARNAME_FILL), Image.new('RGBA', (W, H)), F))
     return out
 
 # help-bar buttons (s3_com_help_btn_txt_*): white text, black edge, dark band, cream rim,
