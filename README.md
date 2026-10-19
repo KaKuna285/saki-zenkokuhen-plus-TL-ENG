@@ -10,19 +10,21 @@ anyone can pick up the work and continue it.
 
 | Part of the game | Status |
 |---|---|
-| Main menu and mode select | ✅ Done |
-| Help bar and help pages, mode titles | ✅ Done |
-| Shop / cards | 🟡 UI elements done, cards not yet |
-| Music | 🟡 Partially complete, probably requires some more work to edit | 
-| Online / ad-hoc lobby | ✅ Done |
-| Rules screen | ✅ Done |
-| Character names (romaji, given name first) | ✅ Done |
-| Training screens (stats, abilities) | ✅ Done |
-| In-match UI (commands, challenge info, cursor, yakus and end texts) | 🟡 Mostly done, some elements left |
-| Challenges including network challenges| ❌ Not yet |
-| Story mode (speech bubbles, about 700 images) | ❌ Not yet |
+| Main menu and mode select | Done |
+| Help bar and help pages, mode titles | Done |
+| Shop / cards | UI elements done, cards not yet |
+| Music | Partially complete, probably requires some more work to edit | 
+| Online / ad-hoc lobby | Done |
+| Rules screen | Done |
+| Character names (romaji, given name first) | Done |
+| Training screens (stats, abilities) | Done |
+| In-match UI (commands, challenge info, cursor, yakus and end texts) | Mostly done, some elements left |
+| Challenges including network challenges| Not yet |
+| Story mode (speech bubbles, about 700 images) | Not yet |
 
 Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than english translations.
+
+Many items could also use some QA and touching up.
 
 ## For players: installing the patch
 
