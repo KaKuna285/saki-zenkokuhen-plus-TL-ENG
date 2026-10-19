@@ -13,7 +13,7 @@ anyone can pick up the work and continue it.
 | Main menu and mode select | Done |
 | Help bar and help pages, mode titles | Done |
 | Shop / cards | UI elements done, cards not yet |
-| Music | Partially complete, probably requires some more work to edit | 
+| Music | Done |
 | Online / ad-hoc lobby | Done |
 | Rules screen | Done |
 | Character names (romaji, given name first) | Done |
