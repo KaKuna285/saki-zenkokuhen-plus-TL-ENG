@@ -45,6 +45,18 @@ Options (put them before the names):
     --cmd            in-match command labels (s3_tak_cmd_NN): makes both _1 (white, grey outline)
                      and _2 (cream, brown outline), e.g.
                      python3 tools/label.py --cmd s3_tak_cmd_01 "Pon"
+    --start          round-start tiles (s3_tak_start_txt_*, one 64x64 tile per piece; white->green,
+                     orange border like the kanji). "" gives an empty tile. The game leaves a gap
+                     between tiles, so put the whole word "Honba" on _hon and leave _ba empty, e.g.
+                     python3 tools/label.py --start s3_tak_start_txt_e "East" s3_tak_start_txt_01 "1"
+    --abl            "ability activated" banner (s3_tak_abl_tex_01-04: four 40x40 tiles that the game
+                     overlaps; green->yellow, black outline, white rim). Give the base name and the
+                     text split into 4 tiles: "|" = same word, space = word gap. Drawn as one piece
+                     and cut up, so letters join naturally, e.g.
+                     python3 tools/label.py --abl s3_tak_abl_tex "SKI|LL REA|DY"
+    --award          result-screen hand-value banners (s3_rst_award01-05: blue/green/magenta/red/gold,
+                     bigger letters for bigger hands), e.g.
+                     python3 tools/label.py --award s3_rst_award01 "Mangan"
     --title          mode-title style (white->gold text, brown edge, cream rim, shadow,
                      left-aligned). Anything from the first ~ is drawn smaller, e.g.
                      python3 tools/label.py --title s3_com_mode_title_txt03 "Free Match ~Singles~"
@@ -56,7 +68,7 @@ Styles (picked automatically from the file name):
     _disable  grey text, dark outline                       (can't be selected)
     _invalid  grey text, black outline                      (can't be used, e.g. training stats)
 """
-import collections, glob, os, sys
+import collections, glob, os, re, sys
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -123,7 +135,11 @@ def render(size_wh, text, style, font_path, size=26, stroke_w=2, margin=14):
     return out
 
 def _dilate(m, r):
-    """Roughly round dilation of an L mask by r pixels (alternating cross / square steps)."""
+    """Roughly round dilation of an L mask by r pixels (alternating cross / square steps).
+    Works on a padded copy so nothing wraps round from one edge to the other."""
+    if r <= 0: return m
+    W, H = m.size
+    p = Image.new('L', (W + 2 * r + 2, H + 2 * r + 2)); p.paste(m, (r + 1, r + 1)); m = p
     for i in range(r):
         if i % 2 == 0:
             out = m.copy()
@@ -132,7 +148,7 @@ def _dilate(m, r):
             m = out
         else:
             m = m.filter(ImageFilter.MaxFilter(3))
-    return m
+    return m.crop((r + 1, r + 1, r + 1 + W, r + 1 + H))
 
 # character-name plate: (distance from the letters in px, colour, alpha), drawn outside-in
 CHARNAME_RING = [(6, (34, 21, 1), 150), (5, (118, 73, 1), 255), (4, (208, 130, 1), 255),
@@ -450,6 +466,200 @@ def render_chg_info(size_wh, text, font_path, size=None):
 CMD_STYLES = {'1': ((255, 255, 255), (234, 234, 234), (39, 39, 39), (39, 39, 39), 1),
               '2': ((254, 232, 189), (236, 213, 173), (80, 44, 14), (80, 44, 14), 1)}
 
+
+# --- shared helper: text mask that fills a box, drawn at 4x and scaled down (stays sharp) ---
+def _fit_mask(text, font_path, box_w, box_h, ref=None, stretch=1.5, squeeze=0.75):
+    """L mask of `text` (cropped to the ink) sized so that `ref` (default: text) fits box_w,
+    stretched up to `stretch`x taller (never more than box_h); squeezed sideways if `text`
+    is wider than `ref`. Returns (mask, cap_top, baseline) inside the mask."""
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    ref = ref or text
+    fs = 200
+    while fs > 6:
+        f = ImageFont.truetype(font_path, fs)
+        cap = -f.getbbox('H', anchor='ls')[1]
+        if probe.textlength(ref, font=f) <= box_w / squeeze and cap <= box_h: break
+        fs -= 1
+    vs = min(stretch, box_h / cap)                        # vertical stretch
+    big = ImageFont.truetype(font_path, fs * 4)
+    asc, desc = big.getmetrics()
+    w = int(probe.textlength(text, font=big)) + 16
+    m = Image.new('L', (w, asc + desc)); ImageDraw.Draw(m).text((8, asc), text, font=big, fill=255, anchor='ls')
+    hs = min(1.0, box_w * 4 / max(1, (m.getbbox() or (0, 0, 1, 1))[2] - (m.getbbox() or (0, 0, 1, 1))[0]))
+    m = m.resize((max(1, round(w * hs / 4)), max(1, round((asc + desc) * vs / 4))), Image.LANCZOS)
+    bb = m.getbbox() or (0, 0, 1, 1)
+    base = round(asc * vs / 4); top = base - round(cap * vs)
+    return m.crop(bb), top - bb[1], base - bb[1]
+
+# --- round-start tiles (mahjong_table/s3_tak_start_txt_*, 64x64): "East" "1" ... "Hon" "ba" ---
+# white->green letters, black outline, orange bevelled border, dark drop shadow (like the kanji tiles)
+START_RING = [(7, (40, 25, 1), 140), (6, (102, 64, 1), 255), (5, (189, 118, 1), 255),
+              (4, (210, 132, 1), 255), (3, (85, 53, 1), 255), (2, (0, 0, 0), 255)]
+START_FILL = [(0.00, (60, 245, 120)), (0.28, (150, 252, 188)), (0.50, (250, 254, 252)),
+              (0.64, (214, 234, 206)), (0.82, (112, 200, 96)), (1.00, (64, 176, 60))]
+# every tile uses the same font size and the same squeeze/stretch, so all letters and digits
+# have the same stroke thickness (the widest word, "South", decides the squeeze)
+START_SIZE = 25              # font size before scaling
+START_HX, START_VY = 0.72, 1.75  # horizontal squeeze, vertical stretch
+
+def render_start(size_wh, text, font_path, name=''):
+    W, H = size_wh
+    out = Image.new('RGBA', (W, H))
+    if not text.strip(): return out                         # empty text -> empty tile
+    key = name.rsplit('_', 1)[-1]
+    pad = START_RING[0][0] + 1
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    f = ImageFont.truetype(font_path, START_SIZE)
+    cap = -f.getbbox('H', anchor='ls')[1]
+    big = ImageFont.truetype(font_path, START_SIZE * 4)
+    asc, desc = big.getmetrics()
+    w = int(probe.textlength(text, font=big)) + 16
+    m = Image.new('L', (w, asc + desc)); ImageDraw.Draw(m).text((8, asc), text, font=big, fill=255, anchor='ls')
+    hx = START_HX
+    ink = m.getbbox() or (0, 0, 1, 1)
+    if (ink[2] - ink[0]) * hx / 4 > W - 2 * pad + 4:        # only if a word is still too wide
+        hx = (W - 2 * pad + 4) * 4 / (ink[2] - ink[0])
+    m = m.resize((max(1, round(w * hx / 4)), max(1, round((asc + desc) * START_VY / 4))), Image.LANCZOS)
+    bb = m.getbbox() or (0, 0, 1, 1)
+    base = round(asc * START_VY / 4) - bb[1]; top = base - round(cap * START_VY)
+    m = m.crop(bb)
+    x = (W - m.width) // 2
+    y = (H - 2 - (base - top)) // 2 - top
+    F = Image.new('L', (W, H)); F.paste(m, (x, y))
+    sh = _dilate(F, START_RING[0][0]); shm = Image.new('L', (W, H)); shm.paste(sh, (1, 2))
+    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), (0, 0, 0, 255)), out, shm.point(lambda v: v * 200 // 255)))
+    for dist, col, alpha in START_RING:
+        d = _dilate(F, dist)
+        if alpha < 255: d = d.point(lambda v: v * alpha // 255)
+        out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), col + (255,)), Image.new('RGBA', (W, H)), d))
+    out.alpha_composite(Image.composite(_grad_img(W, H, y + top, y + base, START_FILL), Image.new('RGBA', (W, H)), F))
+    # keep a clear 1px border: the game's texture filtering wraps edge pixels round to the
+    # opposite side (that was the dark line next to "ba")
+    a = out.getchannel('A'); ImageDraw.Draw(a).rectangle([0, 0, W - 1, H - 1], outline=0)
+    out.putalpha(a)
+    return out
+
+# --- "ability activated" tiles (mahjong_table/s3_tak_abl_tex_01-04, 40x40 each). In game the
+# four tiles are drawn 30 px apart, so they overlap by 10 px. The whole text is drawn once on
+# a 130x40 strip (so letters, outlines and rims join up like normal text) and then cut into
+# the four tiles at the middle of each overlap; each tile only keeps its own 30 px slice.
+# Text: "|" = next tile, same word (no gap), " " = next tile with a word gap, e.g. "SKI|LL REA|DY".
+# Green->yellow letters, black outline, white rim, soft shadow.
+ABL_FILL = [(0.00, (12, 150, 70)), (0.30, (20, 178, 58)), (0.60, (120, 213, 33)), (1.00, (226, 244, 8))]
+ABL_RING = [(4, (255, 255, 255), 255), (2, (0, 0, 0), 255)]
+ABL_SIZE, ABL_HX, ABL_VY = 17, 0.80, 1.45    # font size, horizontal squeeze, vertical stretch
+ABL_PITCH, ABL_TILE, ABL_GAP = 30, 40, 1      # tile spacing in game, tile size, ink gap at a "|" join
+
+def render_abl_set(text, font_path, n=4):
+    P, T = ABL_PITCH, ABL_TILE
+    W, H = P * (n - 1) + T, T
+    seps, pieces, cur = [], [], ''
+    for ch in text:
+        if ch in '| ':
+            pieces.append(cur); seps.append(ch); cur = ''
+        else: cur += ch
+    pieces.append(cur)
+    if len(pieces) != n:
+        sys.exit(f'!! --abl needs {n} pieces separated by "|" or spaces, got {len(pieces)}: {text!r}')
+    probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    f = ImageFont.truetype(font_path, ABL_SIZE); cap = -f.getbbox('H', anchor='ls')[1]
+    big = ImageFont.truetype(font_path, ABL_SIZE * 4); asc, desc = big.getmetrics()
+    def mask_of(t):
+        w = int(probe.textlength(t, font=big)) + 16 if t else 1
+        m = Image.new('L', (w, asc + desc))
+        if t: ImageDraw.Draw(m).text((8, asc), t, font=big, fill=255, anchor='ls')
+        return m
+    # one squeeze for all tiles: the widest piece (plus its outline) must fit a 30 px slice
+    def inkw(t):
+        bb = mask_of(t).getbbox(); return (bb[2] - bb[0]) / 4 if bb else 0
+    edge = ABL_RING[1][0]
+    hx = min(ABL_HX, (P - 2 * edge - 1) / max(1, max(inkw(t) for t in pieces)))
+    base = round(asc * ABL_VY / 4); top = base - round(cap * ABL_VY)
+    y0 = (H - 1 - (base - top)) // 2 - top
+    F = Image.new('L', (W, H))
+    # words = runs of pieces joined by "|"; each word is drawn whole (normal letter spacing)
+    # and slid sideways so its "|" split points land on the cuts between tiles
+    i = 0
+    while i < n:
+        j = i
+        while j < n - 1 and seps[j] == '|': j += 1
+        word = ''.join(pieces[i:j + 1])
+        if word:
+            m = mask_of(word)
+            m = m.resize((max(1, round(m.width * hx / 4)), max(1, round(m.height * ABL_VY / 4))), Image.LANCZOS)
+            if j > i:
+                shifts = []
+                for k in range(i, j):
+                    b = (8 + probe.textlength(''.join(pieces[i:k + 1]), font=big)) * hx / 4   # split point
+                    shifts.append(P * k + T - (T - P) / 2 - b)
+                x = round(sum(shifts) / len(shifts))
+            else:
+                bb = m.getbbox() or (0, 0, m.width, m.height)
+                lo = 0 if i == 0 else P * i + (T - P) // 2
+                hi = W if i == n - 1 else P * i + T - (T - P) // 2
+                x = (lo + hi - (bb[2] - bb[0])) // 2 - bb[0]
+            F.paste(ImageChops.lighter(F.crop((x, y0, x + m.width, y0 + m.height)), m), (x, y0))
+        i = j + 1
+    clear = Image.new('RGBA', (W, H)); out = Image.new('RGBA', (W, H))
+    sh = Image.new('L', (W, H)); sh.paste(_dilate(F, ABL_RING[0][0]).filter(ImageFilter.GaussianBlur(0.8)), (1, 2))
+    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), (20, 20, 20, 255)), clear, sh.point(lambda v: v * 150 // 255)))
+    for dist, col, alpha in ABL_RING:
+        out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, _dilate(F, dist)))
+    out.alpha_composite(Image.composite(_grad_img(W, H, y0 + top, y0 + base, ABL_FILL), clear, F))
+    tiles = []
+    for i in range(n):
+        t = out.crop((P * i, 0, P * i + T, H))
+        a = t.getchannel('A'); d = ImageDraw.Draw(a)
+        if i > 0: d.rectangle([0, 0, (T - P) // 2 - 1, H], fill=0)
+        if i < n - 1: d.rectangle([T - (T - P) // 2, 0, T, H], fill=0)
+        t.putalpha(a); tiles.append(t)
+    return tiles, out
+
+# --- hand-value banners on the result screen (mahjong_table/s3_rst_award01-05, 328x152) ---
+# glossy two-tone letters (colour on top, a sharp white band through the middle, colour again
+# at the bottom), light inner rim, dark outline, white rim, heavy black drop shadow.
+# (light, mid, deep, pale, dark edge) per banner; bigger hands get bigger letters.
+AWARD_COLORS = {
+    '01': ((205, 210, 248), (150, 165, 242), (40, 92, 196), (232, 236, 250), (6, 8, 52)),     # Mangan: blue
+    '02': ((170, 248, 110), (100, 240, 24), (70, 196, 12), (222, 246, 212), (14, 44, 6)),     # Haneman: green
+    '03': ((246, 170, 246), (238, 122, 246), (224, 44, 240), (246, 228, 246), (52, 4, 56)),   # Baiman: magenta
+    '04': ((246, 206, 206), (244, 124, 124), (238, 52, 52), (246, 228, 228), (62, 8, 8)),     # Sanbaiman: red
+    '05': ((252, 238, 218), (246, 168, 72), (206, 122, 16), (252, 228, 204), (60, 34, 4)),    # Yakuman: orange-gold
+}
+AWARD_SCALE = {'01': (54, 0.74), '02': (62, 0.82), '03': (70, 0.9), '04': (78, 1.0), '05': (88, 1.0)}   # (capital height px, share of the width)
+
+def render_award(size_wh, text, font_path, name=''):
+    W, H = size_wh
+    key = name[-2:] if name[-2:] in AWARD_COLORS else '05'
+    light, mid, deep, pale, edge = AWARD_COLORS[key]
+    cap, kw = AWARD_SCALE[key]; k = cap / 88
+    pad = 12
+    m, top, base = _fit_mask(text, font_path, round((W - 2 * pad - 6) * kw), cap, stretch=1.45, squeeze=0.55)
+    F = Image.new('L', (W, H))
+    # like the originals: centred sideways, sitting on a common bottom line
+    x = (W - 6 - m.width) // 2; y = H - 6 - max(3, round(6 * k)) - 4 - m.height
+    F.paste(m, (x, y))
+    t, b = y + top, y + base
+    s = max(3, round(6 * k))                                 # shadow offset grows with the letters
+    clear = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    e = 2 if k < 0.8 else 3
+    edgem = _dilate(F, e); rim = _dilate(F, e + 2).filter(ImageFilter.GaussianBlur(0.4))
+    shm = Image.new('L', (W, H)); shm.paste(rim, (s, s + 1))
+    out = layer(shm, (0, 0, 0), 235)
+    out.alpha_composite(layer(rim, (255, 255, 255)))
+    out.alpha_composite(layer(edgem, edge))
+    out.alpha_composite(layer(F, light))                     # light inner rim shows round the fill
+    inner = F.filter(ImageFilter.MinFilter(3))
+    stops = [(0.00, light), (0.30, mid), (0.45, deep), (0.50, (250, 250, 252)), (0.60, pale),
+             (0.78, mid), (1.00, deep)]
+    out.alpha_composite(Image.composite(_grad_img(W, H, t, b, stops), clear, inner))
+    hi = ImageChops.subtract(inner, ImageChops.offset(inner, 1, 1)).point(lambda v: v * 160 // 255)
+    out.alpha_composite(layer(hi, (255, 255, 255)))          # thin highlight on top-left edges
+    return out
+
 BOLD_CONDENSED_FONTS = ['/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',
                         '/usr/share/fonts/dejavu/DejaVuSansCondensed-Bold.ttf']
@@ -462,6 +672,7 @@ def find_states(base, extra=()):
 
 def main(argv):
     size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, chg, cmd, args = None, None, False, False, False, False, False, False, False, False, False, []
+    start = award = abl = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -476,11 +687,29 @@ def main(argv):
         elif a == '--rule': rule = True; i += 1
         elif a in ('--chg_info', '--chg-info'): chg = True; i += 1
         elif a == '--cmd': cmd = True; i += 1
+        elif a == '--start': start = True; i += 1
+        elif a == '--award': award = True; i += 1
+        elif a == '--abl': abl = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (BOLD_CONDENSED_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (BOLD_CONDENSED_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd or start) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
+    if abl:
+        for base, text in zip(args[::2], args[1::2]):
+            base = re.sub(r'_0\d$', '', os.path.basename(base).replace('.png', ''))
+            tiles, strip = render_abl_set(text, font)
+            for k, t in enumerate(tiles, 1):
+                src = find_states(f'{base}_{k:02d}')
+                if not src: print(f'!! nothing in work/ja matches "{base}_{k:02d}"'); continue
+                dst = os.path.join(ROOT, 'work', 'en', os.path.relpath(src[0], os.path.join(ROOT, 'work', 'ja')))
+                os.makedirs(os.path.dirname(dst), exist_ok=True); t.save(dst)
+                print(f'   wrote work/en/{os.path.relpath(dst, os.path.join(ROOT, "work", "en"))}')
+            if preview:
+                p = os.path.join(ROOT, 'work', f'preview_{base}.png')
+                bg = Image.new('RGBA', strip.size, (70, 90, 130, 255)); bg.alpha_composite(strip); bg.save(p)
+                print(f'   preview: work/preview_{base}.png')
+        return
     for base, text in zip(args[::2], args[1::2]):
         # Japanese wave dashes aren't in the Latin fonts (they'd draw as a box) -> plain ~
         text = text.replace('\u301c', '~').replace('\uff5e', '~')
@@ -493,7 +722,11 @@ def main(argv):
         for src in files:
             name = os.path.basename(src)[:-4]
             orig = Image.open(src).convert('RGBA')
-            if charname:
+            if start:
+                img = render_start(orig.size, text, font, name)
+            elif award:
+                img = render_award(orig.size, text, font, name)
+            elif charname:
                 img = render_charname(orig.size, text, font, size)
             elif cmd:
                 st = CMD_STYLES.get(name.rsplit('_', 1)[-1], CMD_STYLES['1'])
