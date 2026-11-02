@@ -3,7 +3,7 @@
 An English patch for **Saki Zenkoku-hen Plus** (update 2.01), plus the tools used to make it, so
 anyone can pick up the work and continue it.
 
-**Current version: v1.1.** Download it from the
+**Current version: v1.2.** Download it from the
 [Releases page](https://github.com/KaKuna285/saki-zenkokuhen-plus-TL-ENG/releases).
 
 ## Translation status
@@ -18,11 +18,16 @@ anyone can pick up the work and continue it.
 | Rules screen | Done |
 | Character names (romaji, given name first) | Done |
 | Training screens (stats, abilities) | Done |
-| In-match UI (commands, challenge info, cursor, yakus and end texts) | Mostly done, some elements left |
-| Challenges including network challenges| Not yet |
-| Story mode (speech bubbles, about 700 images) | Not yet |
-| Staff roll (a video, `MOVIE.QPK`) | Not yet |
+| Survival mode | Done |
+| In-match UI (round start, commands, warnings, Skill Ready, rank badges, controls and rule panels, Match Over) | Done (the 親 dealer marker stays Japanese) |
+| Result screen (yaku, yakuman, Mangan–Yakuman banners, fu / han / points) | Done |
+| Challenge mode (challenge list, conditions, success / fail) | Done |
 | Save-data and online messages | Done |
+| Game title (Vita3K list / Vita home screen) | Done |
+| Screen transition cards (`s3_wip_*`) | Not planned for now |
+| Story mode (speech bubbles, about 700 images) | Not planned for now |
+| Digital manual, trophies, LiveArea | Not yet |
+| Staff roll (a video, `MOVIE.QPK`) | Not yet |
 
 
 Yaku names use romaji (Riichi, Tanyao, Kokushi Musou …) and "Han" rather than english translations.
@@ -42,9 +47,10 @@ version; the installer checks this and changes nothing if your files don't match
    - **Real PS Vita:** run the installer with an output folder
      (`./apply.sh <DATA> <output>`), then copy the output to `ux0:rePatch/PCSG00908/DATA/`
 
-The installer also patches `eboot.bin` (music list names, save and online messages) if your
-copy matches the one the patch was made from; if not, it says "skipped eboot.bin" and that
-text stays Japanese. Your original files are kept as `*.orig`. To uninstall: `./apply.sh --restore <DATA folder>`.
+The installer also patches `eboot.bin` (music list names, save and online messages) and
+`sce_sys/param.sfo` (the game title) if your copies match the ones the patch was made from; if
+not, it says "skipped ..." and that part stays Japanese. Vita3K may show the old title until you
+refresh its game list. Your original files are kept as `*.orig`. To uninstall: `./apply.sh --restore <DATA folder>`.
 A newer release installs straight over an older one. The `README.txt` inside the zip has the
 full instructions.
 
@@ -101,8 +107,16 @@ python3 tools/label.py --preview s3_mmenu_btn_txt_shop "Shop"   # also writes a 
 | `--rule` | rules screen (`s3_rule_txt*`, `s3_rule_item_txt_*`) |
 | `--chg_info` | in-match challenge conditions (`s3_tak_chg_info_*`) |
 | `--cmd` | in-match commands (`s3_tak_cmd_NN`, both `_1` and `_2`) |
+| `--start` | round-start tiles (`s3_tak_start_txt_*`); `""` gives an empty tile |
+| `--award` | result banners Mangan–Yakuman (`s3_rst_award01`–`05`) |
+| `--abl` | "Skill Ready" banner: base name + text split into 4 tiles, e.g. `--abl s3_tak_abl_tex "SKI\|LL REA\|DY"` |
+| `--close` | Match Over / Game Over banners (`s3_tak_close`, `s3_survival_close`) |
+| `--rank` | 1st–4th badges (`s3_tak_scr_rank1`–`4`), all the same size |
+| `--chg_inf` | challenge list info (`s3_chg_inf_txt_NN`): round `\n` condition `\n` reward |
 
-Other options: `--size N`, `--font file.ttf`. Use `\n` in the text for two lines.
+Other options: `--size N`, `--font file.ttf`, `--list FILE` (read name/text pairs from a file,
+one `name<TAB>text` per line, e.g. `python3 tools/label.py --chg_inf --list text/chg_inf.tsv`).
+Use `\n` in the text for two lines.
 `python3 tools/label.py` with no arguments prints the full help.
 
 ### Text inside the game program (eboot.bin)
@@ -120,17 +134,23 @@ python3 tools/eboot.py dump $GAME     # list all Japanese strings -> work/eboot_
 English must fit in the bytes of the Japanese (a Japanese character is 3 bytes, a letter 1)
 plus any free space after it, and `%s`/`%d` codes must stay the same. `check` tells you.
 
+### Game title (param.sfo)
+
+The title shown in the Vita3K game list and on the Vita home screen is in `sce_sys/param.sfo`.
+The English values are in `text/param_sfo.tsv` (key, tab, value); `build` writes
+`build/sce_sys/param.sfo`. `python3 tools/sfo.py show $GAME` lists what is in the game's file.
+
 Complex screens (for example the training ability pages, `s3_trng_ability_info_NN`) were made in
 GIMP with DejaVu Sans Bold.
 
 ### Making a release
 
 ```fish
-python3 tools/saki.py patch $GAME v1.1 "What's new in this version"
+python3 tools/saki.py patch $GAME v1.2 "What's new in this version"
 ```
 
 This builds, makes xdelta patches from the original 2.01 files to the translation, self-tests
-them and writes `releases/saki-zenkoku-plus-en-v1.1.zip`, with installers for Linux/macOS
+them and writes `releases/saki-zenkoku-plus-en-v1.2.zip`, with installers for Linux/macOS
 (`apply.sh`) and Windows (`apply.bat`/`apply.ps1` plus `xdelta3.exe`). Every release patches from
 the originals, so players only ever need the newest one.
 
@@ -139,10 +159,11 @@ the originals, so players only ever need the newest one.
 | Category in `work/ja/` | What's in it |
 |---|---|
 | `story_bubbles` | story speech bubbles (`s3_story_*_word_*`): this *is* the story text |
-| `challenge` | challenge mode conditions (`s3_chg_*`); training (`s3_trng_*`, `s3_trmg_*`) is done |
-| `mahjong_table` | in-match UI; a few elements are still Japanese |
+| `main_menu` | screen transition cards (`s3_wip_*`): big title art, best done in GIMP |
+| `mahjong_table` | in-match UI is done; only `s3_tak_icon01` (親 dealer marker) is left on purpose |
 | `shop_cards` | shop and card related, cards are still in Japanese |
 | `dummy_unused` | probably unused placeholders, can be skipped |
+| `sce_sys/manual`, `sce_sys/trophy`, `sce_sys/livearea` | digital manual (25 PNG pages), trophy names (`TROPHY.TRP`), LiveArea images; not in `work/ja` |
 | `DATA/MOVIE.QPK` | two MP4 videos (960×544, H.264): the opening and the staff roll; the credits are baked into the video |
 
 Open questions:
