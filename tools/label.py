@@ -54,6 +54,17 @@ Options (put them before the names):
                      text split into 4 tiles: "|" = same word, space = word gap. Drawn as one piece
                      and cut up, so letters join naturally, e.g.
                      python3 tools/label.py --abl s3_tak_abl_tex "SKI|LL REA|DY"
+    --chg_inf        challenge list info (challenge/s3_chg_inf_txt_01-30): three left-aligned lines,
+                     round \\n condition \\n reward; long lines are squeezed, then shrunk, e.g.
+                     python3 tools/label.py --chg_inf s3_chg_inf_txt_02 "East 1, 0 Honba\\nWin a hand\\n10 coins"
+    --list FILE      read the name/text pairs from FILE (one per line: name<TAB>text, # = comment),
+                     e.g. python3 tools/label.py --chg_inf --list text/chg_inf.tsv
+    --close          "match over" banners (s3_tak_close: blue; s3_survival_close: green), e.g.
+                     python3 tools/label.py --close s3_tak_close "Match Over" s3_survival_close "Game Over"
+                     (\\n for two lines)
+    --rank           placing badges 1st-4th (s3_tak_scr_rank1-4: red/yellow/cyan/green), all four the
+                     same size, e.g.
+                     python3 tools/label.py --rank s3_tak_scr_rank1 "1st" s3_tak_scr_rank2 "2nd" ...
     --award          result-screen hand-value banners (s3_rst_award01-05: blue/green/magenta/red/gold,
                      bigger letters for bigger hands), e.g.
                      python3 tools/label.py --award s3_rst_award01 "Mangan"
@@ -615,6 +626,107 @@ def render_abl_set(text, font_path, n=4):
         t.putalpha(a); tiles.append(t)
     return tiles, out
 
+# --- generic outlined badge: gradient letters, dark edge, white rim, dark outer line + shadow ---
+def _badge(size_wh, text, font_path, fill, edge, outer, box_w, box_h, ref=None, glow=None,
+           stretch=1.3, squeeze=0.7, shadow=(2, 3), widths=(2, 2, 2)):
+    """widths = (edge, white rim, outer) thickness in px."""
+    W, H = size_wh
+    m, top, base = _fit_mask(text, font_path, box_w, box_h, ref=ref, stretch=stretch, squeeze=squeeze)
+    we, wr, wo = widths
+    x = (W - m.width) // 2; y = (H - shadow[1] - m.height) // 2
+    F = Image.new('L', (W, H)); F.paste(m, (x, y))
+    clear = Image.new('RGBA', (W, H)); out = Image.new('RGBA', (W, H))
+    def layer(mask, col, alpha=255):
+        if alpha < 255: mask = mask.point(lambda v: v * alpha // 255)
+        return Image.composite(Image.new('RGBA', (W, H), col + (255,)), clear, mask)
+    o = _dilate(F, we + wr + wo)
+    if glow:
+        g = _dilate(o, 2).filter(ImageFilter.GaussianBlur(2.5))
+        out.alpha_composite(layer(g, glow[0], glow[1]))
+    sh = Image.new('L', (W, H)); sh.paste(o, shadow)
+    out.alpha_composite(layer(sh, (0, 0, 0), 170))
+    out.alpha_composite(layer(o, outer))
+    out.alpha_composite(layer(_dilate(F, we + wr), (255, 255, 255)))
+    out.alpha_composite(layer(_dilate(F, we), edge))
+    out.alpha_composite(Image.composite(_grad_img(W, H, y + top, y + base, fill), clear, F))
+    return out
+
+# --- "match over" / "game over" banners (s3_tak_close 168x80: blue; s3_survival_close 168x96: green) ---
+CLOSE_STYLES = {
+    'tak':      dict(fill=[(0.00, (150, 175, 255)), (0.30, (95, 105, 252)), (0.55, (40, 40, 205)),
+                           (0.80, (16, 60, 175)), (1.00, (40, 110, 215))],
+                     edge=(5, 0, 34), outer=(0, 0, 0)),
+    'survival': dict(fill=[(0.00, (205, 240, 245)), (0.30, (110, 190, 140)), (0.60, (120, 165, 90)),
+                           (1.00, (215, 210, 95))],
+                     edge=(36, 18, 2), outer=(36, 18, 2), glow=((255, 255, 255), 150)),
+}
+
+def render_close(size_wh, text, font_path, name=''):
+    W, H = size_wh
+    st = CLOSE_STYLES['survival' if 'survival' in name else 'tak']
+    lines = text.replace('\\n', '\n').split('\n')
+    if len(lines) > 1:                                     # two lines: draw each, stack them
+        out = Image.new('RGBA', (W, H)); h = H // len(lines) + 4
+        for k, ln in enumerate(lines):
+            part = _badge((W, h), ln, font_path, box_w=W - 16, box_h=h - 18, **st)
+            out.alpha_composite(part, (0, round(k * (H - h) / (len(lines) - 1))))
+        return out
+    return _badge(size_wh, text, font_path, box_w=W - 16, box_h=round(H * 0.42), **st)
+
+# --- placing badges 1st-4th (s3_tak_scr_rank1-4, 80x48): red / yellow / cyan / green ---
+RANK_COLORS = {
+    '1': ((255, 205, 205), (253, 110, 110), (240, 25, 25), (30, 0, 0)),
+    '2': ((255, 248, 200), (252, 225, 90), (235, 185, 15), (34, 24, 0)),
+    '3': ((210, 248, 255), (110, 215, 250), (20, 160, 230), (0, 20, 34)),
+    '4': ((210, 250, 210), (100, 210, 110), (20, 150, 45), (0, 26, 4)),
+}
+RANK_REF = ['1st', '2nd', '3rd', '4th']                   # all four are sized to fit the widest
+
+def render_rank(size_wh, text, font_path, name=''):
+    W, H = size_wh
+    light, mid, deep, edge = RANK_COLORS.get(name[-1:], RANK_COLORS['1'])
+    probe = ImageDraw.Draw(Image.new('L', (1, 1))); f = ImageFont.truetype(font_path, 40)
+    ref = max(RANK_REF + [text], key=lambda t: probe.textlength(t, font=f))
+    fill = [(0.00, light), (0.45, mid), (1.00, deep)]
+    return _badge(size_wh, text, font_path, fill, edge, (0, 0, 0), box_w=W - 24, box_h=H - 24, ref=ref,
+                  stretch=1.25, squeeze=0.8, shadow=(1, 2))
+
+# --- challenge list info (challenge/s3_chg_inf_txt_01-30, 264x96): three left-aligned lines
+#     round / condition / reward, white text with a black outline and a soft shadow ---
+CHGINF_ROWS = (3, 36, 69)      # top of the capitals of each line (as in the originals)
+CHGINF_X, CHGINF_CAP = 11, 17  # left edge, capital height in px
+
+def render_chg_inf(size_wh, text, font_path, size=None):
+    W, H = size_wh
+    lines = text.replace('\\n', '\n').split('\n')
+    F = Image.new('L', (W, H)); probe = ImageDraw.Draw(Image.new('L', (1, 1)))
+    tops = []
+    for k, ln in enumerate(lines[:3]):
+        if not ln.strip(): continue
+        fs = size or 30
+        while fs > 8 and -ImageFont.truetype(font_path, fs).getbbox('H', anchor='ls')[1] > CHGINF_CAP: fs -= 1
+        while True:                                       # squeeze to 0.75, then shrink
+            f = ImageFont.truetype(font_path, fs)
+            r = _text_mask(ln, f, W - CHGINF_X - 6, 0.75)
+            if r or fs <= 8: break
+            fs -= 1
+        m, asc = r or _text_mask(ln, f, W - CHGINF_X - 6, 0.01)
+        cap = -f.getbbox('H', anchor='ls')[1]
+        y = CHGINF_ROWS[k] + (CHGINF_CAP - cap) // 2 + cap - asc   # same baseline whatever the size
+        F.paste(ImageChops.lighter(F.crop((CHGINF_X, y, CHGINF_X + m.width, y + m.height)), m), (CHGINF_X, y))
+        tops.append((CHGINF_ROWS[k], CHGINF_ROWS[k] + CHGINF_CAP))
+    clear = Image.new('RGBA', (W, H)); out = Image.new('RGBA', (W, H))
+    sh = Image.new('L', (W, H)); sh.paste(_dilate(F, 3).filter(ImageFilter.GaussianBlur(1.2)), (1, 2))
+    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), (0, 0, 0, 255)), clear, sh.point(lambda v: v * 110 // 255)))
+    out.alpha_composite(Image.composite(Image.new('RGBA', (W, H), (0, 0, 0, 255)), clear, _dilate(F, 2)))
+    grad = Image.new('RGBA', (W, H))
+    for t, b in tops:                                     # white, a touch greyer at the bottom of each line
+        g = _grad_img(W, H, t, b + 4, [(0.0, (255, 255, 255)), (0.6, (250, 250, 250)), (1.0, (214, 214, 214))])
+        band = Image.new('L', (W, H)); ImageDraw.Draw(band).rectangle([0, t - 6, W, b + 8], fill=255)
+        grad = Image.composite(g, grad, band)
+    out.alpha_composite(Image.composite(grad, clear, F))
+    return out
+
 # --- hand-value banners on the result screen (mahjong_table/s3_rst_award01-05, 328x152) ---
 # glossy two-tone letters (colour on top, a sharp white band through the middle, colour again
 # at the bottom), light inner rim, dark outline, white rim, heavy black drop shadow.
@@ -672,7 +784,7 @@ def find_states(base, extra=()):
 
 def main(argv):
     size, font, preview, charname, helpbtn, title, yaku, yakuman, rule, chg, cmd, args = None, None, False, False, False, False, False, False, False, False, False, []
-    start = award = abl = False
+    start = award = abl = close = rank = chginf = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -690,10 +802,18 @@ def main(argv):
         elif a == '--start': start = True; i += 1
         elif a == '--award': award = True; i += 1
         elif a == '--abl': abl = True; i += 1
+        elif a == '--close': close = True; i += 1
+        elif a in ('--chg_inf', '--chg-inf'): chginf = True; i += 1
+        elif a == '--list':
+            for ln in open(os.path.expanduser(argv[i + 1]), encoding='utf-8'):
+                ln = ln.rstrip('\r\n')
+                if ln.strip() and not ln.startswith('#') and '\t' in ln: args.extend(ln.split('\t', 1))
+            i += 2
+        elif a == '--rank': rank = True; i += 1
         elif a in ('-h', '--help'): sys.exit(__doc__)
         else: args.append(a); i += 1
     if not args or len(args) % 2: sys.exit(__doc__)
-    font = font or next((p for p in (BOLD_CONDENSED_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd or start) else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
+    font = font or next((p for p in (BOLD_CONDENSED_FONTS if charname else []) + (BOLD_CONDENSED_FONTS if (yaku or rule or cmd or start) else []) + (CHARNAME_FONTS if chginf else []) + (CONDENSED_FONTS if helpbtn else []) + FONTS if os.path.exists(p)), None)
     if not font: sys.exit('No font found - pass one with --font /path/to/font.ttf')
     if abl:
         for base, text in zip(args[::2], args[1::2]):
@@ -726,6 +846,12 @@ def main(argv):
                 img = render_start(orig.size, text, font, name)
             elif award:
                 img = render_award(orig.size, text, font, name)
+            elif close:
+                img = render_close(orig.size, text, font, name)
+            elif chginf:
+                img = render_chg_inf(orig.size, text, font, size)
+            elif rank:
+                img = render_rank(orig.size, text, font, name)
             elif charname:
                 img = render_charname(orig.size, text, font, size)
             elif cmd:

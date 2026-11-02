@@ -1,0 +1,7 @@
+# Text values in sce_sys/param.sfo: KEY<TAB>value. The title shown in the Vita3K game list
+# and on the Vita home screen (STITLE = short title, max 51 bytes; TITLE = full title).
+# The _00 keys are the Japanese-language copies the system falls back to.
+TITLE	Saki Zenkoku-hen Plus
+TITLE_00	Saki Zenkoku-hen Plus
+STITLE	Saki Zenkoku-hen Plus
+STITLE_00	Saki Zenkoku-hen Plus

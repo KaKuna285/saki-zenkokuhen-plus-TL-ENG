@@ -15,8 +15,10 @@ if ($a -eq '--restore' -or $a -eq 'restore') {
     $b = $b.Trim('"').TrimEnd('\\')
     foreach ($f in $files) { $o = Join-Path $b "$($f.Name).orig"
         if (Test-Path $o) { Copy-Item -Force $o (Join-Path $b $f.Name); "restored $($f.Name)" } }
-    $e = Join-Path (Split-Path -Parent $b) 'eboot.bin'
-    if ((Test-Path (Join-Path $here 'optional.txt')) -and (Test-Path "$e.orig")) { Copy-Item -Force "$e.orig" $e; 'restored eboot.bin' }
+    $optr = Join-Path $here 'optional.txt'
+    if (Test-Path $optr) { foreach ($line in (Get-Content $optr | Where-Object { $_.Trim() })) {
+        $name = ($line -split '\s+')[0]; $e = Join-Path (Split-Path -Parent $b) $name
+        if (Test-Path "$e.orig") { Copy-Item -Force "$e.orig" $e; "restored $name" } } }
     exit 0
 }
 if (-not $a) { $a = Read-Host 'Drag the game''s DATA folder here and press Enter' }
@@ -41,17 +43,20 @@ foreach ($f in $files) {
     if ($LASTEXITCODE -ne 0 -or (Sha "$dest.tmp") -ne $f.New) { Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"; "PATCH FAILED for $($f.Name)"; exit 1 }
     Move-Item -Force "$dest.tmp" $dest
 }
-# eboot.bin (game folder, next to DATA): music list names, save and online messages.
-# Only patched if your copy is exactly the expected one; otherwise that text stays Japanese.
+# Files in the game folder (next to DATA): eboot.bin (music list names, save and online
+# messages) and sce_sys/param.sfo (game title). Each is only patched if your copy is exactly
+# the expected one; otherwise it is skipped and that text stays Japanese.
 $optf = Join-Path $here 'optional.txt'
 if (Test-Path $optf) {
     foreach ($line in (Get-Content $optf | Where-Object { $_.Trim() })) {
         $p = $line -split '\s+'; $name = $p[0]
         $t = Join-Path (Split-Path -Parent $data) $name
         $src = if (Test-Path "$t.orig") { "$t.orig" } else { $t }
-        if (-not (Test-Path $src) -or (Sha $src) -ne $p[1]) { "skipped $name (your copy is different) - the music list and system messages stay Japanese"; continue }
+        if (-not (Test-Path $src)) { "skipped $name (not found next to the DATA folder)"; continue }
+        if ((Sha $src) -ne $p[1]) { "skipped $name (your copy is different - that part stays Japanese)"; continue }
         if (-not $out -and $src -eq $t) { Copy-Item -Force $t "$t.orig"; $src = "$t.orig" }
         $dest = if ($out) { Join-Path (Split-Path -Parent ([IO.Path]::GetFullPath($out))) $name } else { $t }
+        New-Item -ItemType Directory -Force (Split-Path -Parent $dest) | Out-Null
         "patching $name ..."
         & $xd -d -f -s $src ([IO.Path]::Combine($here, "patches", "$name.xdelta")) "$dest.tmp"
         if ($LASTEXITCODE -ne 0 -or (Sha "$dest.tmp") -ne $p[2]) { Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"; "PATCH FAILED for $name"; exit 1 }

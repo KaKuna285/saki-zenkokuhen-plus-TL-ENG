@@ -25,10 +25,12 @@ INSTALL - VITA3K
   Installing a newer version of this patch later works the same way.
 
   The music list names and the save/online messages are inside eboot.bin (the
-  game program, next to the DATA folder). It is only patched if your copy is
-  exactly the one the patch was made from; otherwise the installer says
-  "skipped eboot.bin" and that text simply stays Japanese. Everything else
-  works either way.
+  game program, next to the DATA folder), and the game title shown in the
+  Vita3K list / on the home screen is in sce_sys/param.sfo. Each is only
+  patched if your copy is exactly the one the patch was made from; otherwise
+  the installer says "skipped ..." and that part simply stays Japanese.
+  Everything else works either way. Vita3K may show the old title until you
+  refresh its game list (or restart it).
 
 INSTALL - REAL PS VITA (rePatch)
   1. Copy the game's DATA files to your PC. Files from the 2.01 update
@@ -37,15 +39,15 @@ INSTALL - REAL PS VITA (rePatch)
        ./apply.sh /path/to/DATA  /path/to/rePatch/PCSG00908/DATA
        apply.bat "C:\path\to\DATA" "C:\path\to\rePatch\PCSG00908\DATA"
   3. Copy the whole PCSG00908 output folder to  ux0:rePatch/
-     (if eboot.bin was patched it sits in PCSG00908/, next to DATA)
+     (if eboot.bin / sce_sys/param.sfo were patched they sit in PCSG00908/, next to DATA)
 
 UNINSTALL
   ./apply.sh --restore <DATA folder>     or     apply.bat --restore "<DATA folder>"
 
 MANUAL INSTALL (Delta Patcher etc.)
   Each file in patches/ is a normal xdelta3 patch for the DATA file of the same
-  name (e.g. patches/TGA.QPK.xdelta -> DATA/TGA.QPK). patches/eboot.bin.xdelta is
-  for eboot.bin in the game folder. Expected checksums are in files.txt,
+  name (e.g. patches/TGA.QPK.xdelta -> DATA/TGA.QPK). patches/eboot.bin.xdelta and
+  patches/sce_sys/param.sfo.xdelta are for those files in the game folder. Expected checksums are in files.txt,
   optional.txt (name, original sha1, patched sha1) and manifest.json.
 
 CREDITS / LICENCES

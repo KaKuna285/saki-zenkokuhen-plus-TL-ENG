@@ -53,18 +53,20 @@ while read -r name orig new; do
     mv -f "$dest.tmp" "$dest"
 done < "$HERE/files.txt"
 
-# eboot.bin (game folder, next to DATA): music list names, save and online messages.
-# Only patched if your copy is exactly the expected one; otherwise that text stays Japanese.
+# Files in the game folder (next to DATA): eboot.bin (music list names, save and online
+# messages) and sce_sys/param.sfo (game title). Each is only patched if your copy is exactly
+# the expected one; otherwise it is skipped and that text stays Japanese.
 if [ -f "$HERE/optional.txt" ]; then
     while read -r name orig new; do
         t="$DATA/../$name"
         if [ -f "$t.orig" ]; then b="$t.orig"; else b="$t"; fi
         if [ ! -f "$b" ] || [ "$(sha "$b")" != "$orig" ]; then
-            echo "skipped $name (your copy is different) - the music list and system messages stay Japanese"
+            if [ -f "$b" ]; then echo "skipped $name (your copy is different - that part stays Japanese)"
+            else echo "skipped $name (not found next to the DATA folder)"; fi
             continue
         fi
         if [ -z "$OUT" ] && [ "$b" = "$t" ]; then cp -f "$t" "$t.orig"; b="$t.orig"; fi
-        if [ -n "$OUT" ]; then dest="$OUT/../$name"; else dest="$t"; fi
+        if [ -n "$OUT" ]; then dest="$OUT/../$name"; mkdir -p "$(dirname "$dest")"; else dest="$t"; fi
         echo "patching $name ..."
         xdelta3 -d -f -s "$b" "$HERE/patches/$name.xdelta" "$dest.tmp"
         if [ "$(sha "$dest.tmp")" != "$new" ]; then rm -f "$dest.tmp"; echo "PATCH FAILED for $name"; exit 1; fi

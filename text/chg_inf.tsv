@@ -1,0 +1,65 @@
+# Challenge list info: s3_chg_inf_txt_NN <TAB> round \n condition \n reward
+# Make them all with:  python3 tools/label.py --chg_inf --list text/chg_inf.tsv
+
+# 01: 能力発動中に和了
+s3_chg_inf_txt_01	East 1, 0 Honba\nWin with ability active\n15 coins
+# 02: 和了
+s3_chg_inf_txt_02	East 1, 0 Honba\nWin a hand\n10 coins
+# 03: 1位で終局
+s3_chg_inf_txt_03	East 1, 0 Honba\nFinish in 1st place\n10 coins
+# 04: 門前清摸和で和了
+s3_chg_inf_txt_04	East 1, 0 Honba\nWin with Menzen Tsumo\n15 coins
+# 05: 追っかけリーチ後に和了
+s3_chg_inf_txt_05	East 1, 0 Honba\nWin with Oikake Riichi\n30 coins
+# 06: 一発ツモで和了
+s3_chg_inf_txt_06	East 1, 0 Honba\nWin with Ippatsu Tsumo\n20 coins
+# 07: 和了
+s3_chg_inf_txt_07	South 3, 0 Honba\nWin a hand\n25 coins
+# 08: 和了
+s3_chg_inf_txt_08	East 1, 0 Honba\nWin a hand\n10 coins
+# 09: 混一で和了
+s3_chg_inf_txt_09	East 1, 0 Honba\nWin with Honitsu\n10 coins
+# 10: 跳満以上で和了
+s3_chg_inf_txt_10	East 1, 0 Honba\nWin with Haneman or higher\n10 coins
+# 11: 一発ツモで和了
+s3_chg_inf_txt_11	East 1, 0 Honba\nWin with Ippatsu Tsumo\n20 coins
+# 12: リザベーションクリア
+s3_chg_inf_txt_12	East 1, 0 Honba\nClear Reservation\n10 coins
+# 13: 嶺上開花で和了
+s3_chg_inf_txt_13	East 1, 0 Honba\nWin with Rinshan Kaihou\n20 coins
+# 14: 能力発動中に和了
+s3_chg_inf_txt_14	East 1, 0 Honba\nWin with ability active\n10 coins
+# 15: 和了
+s3_chg_inf_txt_15	South 2, 0 Honba\nWin a hand\n10 coins
+# 16: 和了
+s3_chg_inf_txt_16	East 1, 0 Honba\nWin a hand\n10 coins
+# 17: 2位以上で終局
+s3_chg_inf_txt_17	South 4, 0 Honba\nFinish 2nd or higher\n100 coins
+# 18: 3飜以上で和了
+s3_chg_inf_txt_18	East 2, 0 Honba\nWin with 3 han or more\n20 coins
+# 19: 鳴いて和了
+s3_chg_inf_txt_19	East 1, 0 Honba\nWin with an open hand\n15 coins
+# 20: 満貫以上で和了
+s3_chg_inf_txt_20	East 1, 0 Honba\nWin with Mangan or higher\n10 coins
+# 21: 門前清摸和で和了
+s3_chg_inf_txt_21	East 2, 0 Honba\nWin with Menzen Tsumo\n15 coins
+# 22: 和了
+s3_chg_inf_txt_22	East 1, 0 Honba\nWin a hand\n20 coins
+# 23: 能力発動中に和了
+s3_chg_inf_txt_23	East 1, 0 Honba\nWin with ability active\n10 coins
+# 24: 役満で和了
+s3_chg_inf_txt_24	East 2, 0 Honba\nWin with a Yakuman\n20 coins
+# 25: 満貫以上で和了
+s3_chg_inf_txt_25	East 1, 0 Honba\nWin with Mangan or higher\n25 coins
+# 26: 満貫以上で和了
+s3_chg_inf_txt_26	East 1, 1 Honba\nWin with Mangan or higher\n25 coins
+# 27: 1位で終局
+s3_chg_inf_txt_27	East 1, 0 Honba\nFinish in 1st place\n50 coins
+# 28: 跳満以上で和了
+s3_chg_inf_txt_28	South 4, 0 Honba\nWin with Haneman or higher\n35 coins
+# 29: 和了
+s3_chg_inf_txt_29	South 4, 0 Honba\nWin a hand\n10 coins
+# 30: 満貫以上で和了
+s3_chg_inf_txt_30	East 4, 0 Honba\nWin with Mangan or higher\n25 coins
+# omk_01 (bonus challenge): 1位で終局
+s3_chg_inf_txt_omk_01	East 1, 0 Honba\nFinish in 1st place\n20 coins

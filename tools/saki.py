@@ -15,10 +15,12 @@
       bundles in HOTDOG.QPK etc.) into build/DATA/. Untouched entries are copied
       byte-for-byte. Always reads from the original files (.orig backups if present).
       Also translates the text inside eboot.bin (music list, save and online messages)
-      from text/eboot.tsv -> build/eboot.bin (see tools/eboot.py).
+      from text/eboot.tsv -> build/eboot.bin (see tools/eboot.py), and the game title in
+      sce_sys/param.sfo from text/param_sfo.tsv -> build/sce_sys/param.sfo (see tools/sfo.py).
 
   python3 tools/saki.py install <game_dir>
-      Backs up each original file once (as *.orig) and copies build/DATA/* (and build/eboot.bin) into the game.
+      Backs up each original file once (as *.orig) and copies build/DATA/* (plus build/eboot.bin and
+      build/sce_sys/param.sfo) into the game.
 
   python3 tools/saki.py restore <game_dir>
       Puts all *.orig backups back (undo everything).
@@ -31,7 +33,7 @@
 """
 import csv, hashlib, json, os, re, shutil, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import eboot, hdg, qpk, tgaconv
+import eboot, hdg, qpk, sfo, tgaconv
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -171,6 +173,7 @@ def build(game):
     missing = set(edits) - set(seen_name.values())
     if missing: print('  NOTE: no copy found in the game for:', ', '.join(sorted(missing)))
     build_eboot(game)
+    build_sfo(game)
     print('done -> build/DATA/  (run "install" to copy into the game)')
 
 seen_name = {}
@@ -187,6 +190,22 @@ def build_eboot(game):
     for p in problems: print('  WARNING eboot', p)
     open(out, 'wb').write(new)
 
+def build_sfo(game):
+    """text/param_sfo.tsv -> build/sce_sys/param.sfo (the title in the Vita3K list / Vita home screen)."""
+    out = os.path.join(ROOT, 'build', 'sce_sys', 'param.sfo')
+    if os.path.exists(out): os.remove(out)
+    vals = sfo.load_values()
+    if not vals: return
+    src = sfo.sfo_src(game)
+    if not os.path.exists(src): print('  NOTE: no sce_sys/param.sfo in the game folder - title skipped'); return
+    new, problems = sfo.apply(open(src, 'rb').read(), vals)
+    for p in problems: print('  WARNING param.sfo', p)
+    os.makedirs(os.path.dirname(out), exist_ok=True); open(out, 'wb').write(new)
+    print(f'  param.sfo: {len(vals) - len(problems)} of {len(vals)} values changed')
+
+# files outside DATA that build may produce (path relative to the game folder)
+EXTRA_FILES = ['eboot.bin', 'sce_sys/param.sfo']
+
 def install_file(src, dst):
     if not os.path.exists(dst + '.orig'):
         shutil.copy2(dst, dst + '.orig'); print(f'backed up {os.path.basename(dst)} -> {os.path.basename(dst)}.orig')
@@ -196,16 +215,18 @@ def install(game):
     data = os.path.join(game, 'DATA'); outdir = os.path.join(ROOT, 'build', 'DATA')
     for f in sorted(os.listdir(outdir)):
         install_file(os.path.join(outdir, f), os.path.join(data, f))
-    eb = os.path.join(ROOT, 'build', 'eboot.bin')
-    if os.path.exists(eb): install_file(eb, os.path.join(game, 'eboot.bin'))
+    for rel in EXTRA_FILES:
+        src = os.path.join(ROOT, 'build', rel)
+        if os.path.exists(src): install_file(src, os.path.join(game, rel))
 
 def restore(game):
     data = os.path.join(game, 'DATA')
     for f in sorted(os.listdir(data)):
         if f.endswith('.orig'):
             shutil.copy2(os.path.join(data, f), os.path.join(data, f[:-5])); print(f'restored {f[:-5]}')
-    eb = os.path.join(game, 'eboot.bin')
-    if os.path.exists(eb + '.orig'): shutil.copy2(eb + '.orig', eb); print('restored eboot.bin')
+    for rel in EXTRA_FILES:
+        p = os.path.join(game, rel)
+        if os.path.exists(p + '.orig'): shutil.copy2(p + '.orig', p); print(f'restored {rel}')
 
 def sha1(path):
     h = hashlib.sha1()
@@ -229,29 +250,31 @@ def patch(game, version, notes=''):
                           'patch_version': version, 'created': datetime.date.today().isoformat(), 'files': {}}
     print('making xdelta patches ...')
     jobs = [(f, data, os.path.join(newdir, f)) for f in sorted(os.listdir(newdir))]
-    eb = os.path.join(ROOT, 'build', 'eboot.bin')
-    if os.path.exists(eb): jobs.append(('eboot.bin', game, eb))   # optional: only if the player's copy matches
+    for rel in EXTRA_FILES:                  # optional: only patched if the player's copy matches
+        p = os.path.join(ROOT, 'build', rel)
+        if os.path.exists(p): jobs.append((rel, game, p))
     optional = []
     for f, base, new in jobs:
         orig = os.path.join(base, f + '.orig')
         if not os.path.exists(orig): orig = os.path.join(base, f)      # game not patched yet
         out = os.path.join(pkg, 'patches', f + '.xdelta')
+        os.makedirs(os.path.dirname(out), exist_ok=True)
         size = os.path.getsize(orig)
         window = min(1 << 31, max(1 << 26, 1 << (size - 1).bit_length()))   # whole file fits in the window
         subprocess.run([xd, '-e', '-9', '-S', 'djw', '-B', str(window), '-f', '-s', orig, new, out], check=True)
         o, n = sha1(orig), sha1(new)
-        (optional if f == 'eboot.bin' else rows).append(f'{f} {o} {n}')
+        (optional if f in EXTRA_FILES else rows).append(f'{f} {o} {n}')
         manifest['files'][f] = {'original_sha1': o, 'original_size': size, 'patched_sha1': n,
                                 'patched_size': os.path.getsize(new), 'patch': f'patches/{f}.xdelta',
-                                'location': 'game folder (next to DATA), optional' if f == 'eboot.bin' else 'DATA'}
+                                'location': 'game folder (next to DATA), optional' if f in EXTRA_FILES else 'DATA'}
         print(f'  {f}: {os.path.getsize(out) / 1e6:.2f} MB')
     print('verifying: applying the patches to the originals ...')
     with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, 'releases')) as tmp:
         for f, m in manifest['files'].items():
-            base = game if f == 'eboot.bin' else data
+            base = game if f in EXTRA_FILES else data
             orig = os.path.join(base, f + '.orig')
             if not os.path.exists(orig): orig = os.path.join(base, f)
-            res = os.path.join(tmp, f)
+            res = os.path.join(tmp, f.replace('/', '_'))
             subprocess.run([xd, '-d', '-f', '-s', orig, os.path.join(pkg, m['patch']), res], check=True)
             if sha1(res) != m['patched_sha1']:
                 sys.exit(f'VERIFY FAILED for {f} - release not created')
