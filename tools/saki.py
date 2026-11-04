@@ -261,7 +261,7 @@ def patch(game, version, notes=''):
         os.makedirs(os.path.dirname(out), exist_ok=True)
         size = os.path.getsize(orig)
         window = min(1 << 31, max(1 << 26, 1 << (size - 1).bit_length()))   # whole file fits in the window
-        subprocess.run([xd, '-e', '-9', '-S', 'djw', '-B', str(window), '-f', '-s', orig, new, out], check=True)
+        subprocess.run([xd, '-e', '-9', '-S', 'none', '-B', str(window), '-f', '-s', orig, new, out], check=True)
         o, n = sha1(orig), sha1(new)
         (optional if f in EXTRA_FILES else rows).append(f'{f} {o} {n}')
         manifest['files'][f] = {'original_sha1': o, 'original_size': size, 'patched_sha1': n,
